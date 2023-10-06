@@ -3,16 +3,16 @@
 #ifdef UNIT_TEST
 
 #    include <stdbool.h>
+#    include <stdint.h>
 #    include <stdio.h>
 #    include <stdlib.h>
 #    include <string.h>
+#    include <time.h>
 
 #    if defined(__DragonFly__) || defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #        define USE_SYSCTL_FOR_ARGS 1
-// clang-format off
-#include <sys/types.h>
-#include <sys/sysctl.h>
-// clang-format on
+#        include <sys/sysctl.h>
+#        include <sys/types.h>
 #        include <unistd.h>  // getpid
 #    endif
 
@@ -42,8 +42,14 @@ struct test_file_metadata {
 
 struct test_file_metadata __attribute__((weak)) * test_file_head;
 
-#    define SET_FAILURE(_message, _owned) \
-        metadata->failure = (struct test_failure) { .message = _message, .file = __FILE__, .line = __LINE__, .present = true, .owned = _owned, }
+#    define SET_FAILURE(_message, _owned)           \
+        (metadata->failure = (struct test_failure){ \
+             .message = _message,                   \
+             .file    = __FILE__,                   \
+             .line    = __LINE__,                   \
+             .present = true,                       \
+             .owned   = _owned,                     \
+         })
 
 #    define TEST_EQUAL(a, b)                      \
         do {                                      \
@@ -106,6 +112,25 @@ struct test_file_metadata __attribute__((weak)) * test_file_head;
         }                                                                                                            \
         static void __test_h_##_name(struct test_case_metadata *metadata __attribute__((unused)),                    \
                                      struct test_file_metadata *file_metadata __attribute__((unused)))
+#    define SEC_TO_MS(sec)     ((sec)*1000)
+#    define SEC_TO_US(sec)     ((sec)*1000000)
+#    define SEC_TO_NS(sec)     ((sec)*1000000000)
+#    define NS_TO_SEC(ns)      ((ns) / 1000000000)
+#    define NS_TO_MS(ns)       ((ns) / 1000000)
+#    define NS_TO_US(ns)       ((ns) / 1000)
+#    define SEC(sec, nsec)     ((uint64_t)sec + NS_TO_SEC((uint64_t)nsec))
+#    define MS(sec, nsec)      (SEC_TO_MS((uint64_t)sec) + NS_TO_MS((uint64_t)nsec))
+#    define US(sec, nsec)      (SEC_TO_US((uint64_t)sec) + NS_TO_US((uint64_t)nsec))
+#    define NS(sec, nsec)      (SEC_TO_NS((uint64_t)sec) + (uint64_t)nsec)
+
+#    define ANSI_COLOR_RED     "\x1b[31m"
+#    define ANSI_COLOR_GREEN   "\x1b[32m"
+#    define ANSI_COLOR_YELLOW  "\x1b[33m"
+#    define ANSI_COLOR_BLUE    "\x1b[34m"
+#    define ANSI_COLOR_MAGENTA "\x1b[35m"
+#    define ANSI_COLOR_CYAN    "\x1b[36m"
+#    define ANSI_COLOR_RESET   "\x1b[0m"
+#    define COLOR(CLR, STR)    ANSI_COLOR_##CLR STR ANSI_COLOR_RESET
 
 extern void __attribute__((weak)) (*test_h_unittest_setup)(void);
 /// Run defined tests, return true if all tests succeeds
@@ -157,25 +182,49 @@ static inline void __attribute__((constructor(102))) run_tests(void) {
     int                        failed = 0, success = 0;
     while (i) {
         fprintf(stderr, "Running tests from %s:\n", i->name);
+
+        size_t                     max_len_name = 0;
+        struct test_case_metadata *tt           = i->tests;
+        while (tt) {
+            size_t slen = (strlen(tt->name) + 1);
+            if (slen > max_len_name) max_len_name = slen;
+            tt = tt->next;
+        }
+        max_len_name += 2;
+
         struct test_case_metadata *j = i->tests;
         while (j) {
+            struct timespec begin = {0};
+            struct timespec end   = {0};
             fprintf(stderr, "\t%s ... ", j->name);
             j->failure.present = false;
+            clock_gettime(CLOCK_MONOTONIC_RAW, &begin);
             j->fn(j, i);
+            clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+            uint64_t st  = (uint64_t)end.tv_sec - (uint64_t)begin.tv_sec;
+            uint64_t nst = (uint64_t)end.tv_nsec - (uint64_t)begin.tv_nsec;
+
             if (j->failure.present) {
-                fprintf(stderr, "failed (%s at %s:%d)\n", j->failure.message, j->failure.file, j->failure.line);
+                fprintf(stderr, "%*s " COLOR(RED, "failed"), (int)(max_len_name - strlen(j->name)), " ");
+                fprintf(stderr, COLOR(YELLOW, " - (%s at %s:%d)") "\n", j->failure.message, j->failure.file, j->failure.line);
                 if (j->failure.owned) {
                     free((char *)j->failure.message);
                     j->failure.message = NULL;
                 }
                 failed++;
             } else {
-                fprintf(stderr, "passed\n");
+                uint64_t s  = SEC(st, nst);
+                uint64_t ns = NS(st, nst);
+                uint64_t us = US(st, nst);
+                uint64_t ms = MS(st, nst);
+
+                fprintf(stderr, "%*s " COLOR(GREEN, "passed"), (int)(max_len_name - strlen(j->name)), " ");
+                fprintf(stderr, " - (elapsed: %zus:%zums:%zuus:%zuns)\n", s, ms, us, ns);
                 success++;
             }
             j = j->next;
         }
-        fprintf(stderr, "\n");
+
         i = i->next;
     }
     int total = failed + success;

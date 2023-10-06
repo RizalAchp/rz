@@ -462,7 +462,10 @@ cb_strview_t cb_path_filename(cb_path_t *path) {
 }
 
 cb_status_t cb_path_append(cb_path_t *path, cb_strview_t other) {
-    if ((other.count + path->count) >= MAX_PATH) return CB_ERR;
+    if ((other.count + path->count) >= MAX_PATH) {
+        CB_ERROR("cb_path_append - is exceeded the (MAX_PATH=%d)", MAX_PATH);
+        return CB_ERR;
+    }
     if (!cb_sv_end_with(path, CB_DIR_SEPARATOR)) {
         path->data[path->count] = '/';
         path->count++;
@@ -704,7 +707,6 @@ bool cb_proc_wait(cb_proc_t proc) {
                 CB_ERROR("command exited with exit code %d", exit_status);
                 return false;
             }
-
             break;
         }
 
@@ -1092,7 +1094,7 @@ cb_status_t cb_run(cb_t *cb) {
 }
 void cb_deinit(cb_t *cb) {
     CB_INFO("Deinitializing CB (C Builder)");
-    CB_FREE(cb); 
+    CB_FREE(cb);
 }
 
 // RETURNS:

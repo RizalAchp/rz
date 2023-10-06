@@ -1,9 +1,7 @@
-#include <stdio.h>
-#define UNIT_TEST
 #include "tests.h"
-#include "tests_rz_set.c"
+#include <stdio.h>
 
-int main(int argc, char *argv[]) {
-    puts("Running tests...");
+int main(void)
+{
     return EXIT_SUCCESS;
 }
