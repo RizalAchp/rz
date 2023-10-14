@@ -1,44 +1,23 @@
-
 #define CB_IMPLEMENTATION
 #include "cb.h"
 
-#include "tests/tests.h"
-
-// todo
-cb_status_t build(cb_t *cb) {
-    (void)cb;
-    return CB_OK;
-}
-// todo
-cb_status_t tests(cb_t *cb) {
-    (void)cb;
-    return CB_OK;
-}
-
-TEST_CASE(test_cb_path_appends_operation) {
-    cb_path_t p = cb_path("./build/cb");
-    cb_path_append_cstr(&p, "hello");
-    cb_path_append_cstr(&p, "world");
-    TEST_TRUE((memcmp(p.data, "./build/cb/hello/world", p.count) == 0) && "cb_path_append_cstr");
-}
-
-TEST_CASE(test_cb_path_extension_operation) {
-    cb_path_t p = cb_path("./build/cb.c");
-    TEST_TRUE(cb_path_has_extension(&p) && "cb_path_has_extension `./build/cb.c`");
-    cb_strview_t ext = cb_path_extension(&p);
-    TEST_TRUE(cb_sv_eq(ext, cb_sv("c")) && "cb_path_extension `./build/cb.c`");
-    TEST_TRUE(cb_path_with_extension(&p, "h") && "cb_path_with_extension `./build/cb.c`");
-    TEST_TRUE(cb_sv_eq(cb_sv_from_parts(p.data, p.count), cb_sv("./build/cb.h")) && "cb_path_with_extension `./build/cb.c`");
+cb_status_t on_configure(cb_t *cb, cb_config_t *cfg) {
+    (void)cfg;
+    cb_status_t  status       = CB_OK;
+    cb_target_t *tests_target = cb_create_tests(cb, "tests_rz_array");
+    status &= cb_target_add_sources_with_ext(tests_target, "./tests", "c", false);
+    status &= cb_target_add_defines(tests_target, "UNIT_TEST", NULL);
+    status &= cb_target_add_flags(tests_target, "-Wall", "-Wextra", "-pedantic", "-Wpedantic", "-ggdb", "-Os", NULL);
+    status &= cb_target_add_includes(tests_target, "./include", NULL);
+    cb_path_to_cstr(&tests_target->output);
+    return status;
 }
 
 int main(int argc, char *argv[]) {
     CB_REBUILD_SELF(argc, argv);
-
     cb_t *cb = cb_init(argc, argv);
-    if (!cb) return 1;
-    if (cb_run(cb) == CB_ERR) return 1;
+    if (!cb) return EXIT_FAILURE;
+    if (cb_run(cb) == CB_ERR) return EXIT_FAILURE;
     cb_deinit(cb);
-
     return EXIT_SUCCESS;
 }
-
