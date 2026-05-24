@@ -1,0 +1,7 @@
+CompileFlags:                     # Tweak the parse settings
+  Add: [
+    -Isrc, -std=c23, -xc, -ggdb,
+    -Wall, -Wextra, -Wfloat-equal, -Wundef, -Wpointer-arith,
+    -Wstrict-prototypes, -Wswitch-default, -Wswitch-enum, 
+    -Wpedantic, -pedantic, 
+  ]

@@ -1,34 +1,44 @@
----
-BasedOnStyle: Google
-Standard: c++17
+BasedOnStyle: LLVM
 IndentWidth: 4
----
-Language: Cpp
-PointerAlignment: Right
-AlignAfterOpenBracket: Align
-DerivePointerAlignment: false
-# AlignArrayOfStructures: Right
-BreakConstructorInitializers: BeforeComma
-# EmptyLineBeforeAccessModifier: LogicalBlock
-FixNamespaceComments: true
-IncludeBlocks: Regroup
+ColumnLimit: 180
 
-NamespaceIndentation: All
-CompactNamespaces: true
-AllowShortCaseLabelsOnASingleLine: true
-AlignEscapedNewlines: Left
-AlignTrailingComments: true
-AlignConsecutiveMacros: AcrossEmptyLinesAndComments
-AlignConsecutiveDeclarations: AcrossEmptyLines
-AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
-AllowShortFunctionsOnASingleLine: All
+AlignConsecutiveDeclarations: true
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: false
+
+# AlignConsecutiveMacros: AcrossEmptyLines
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: false
+
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+  AlignCaseColons: false
+
+AlignEscapedNewlines: LeftWithLastLine
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 2
+
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
 AllowShortEnumsOnASingleLine: true
-ColumnLimit: '160'
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterEnum: true
+  AfterStruct: false
+  SplitEmptyFunction: false
+
 IndentPPDirectives: AfterHash
 
-AlwaysBreakTemplateDeclarations: Yes
-AlignConsecutiveMacros: AcrossEmptyLines
-AlignConsecutiveAssignments: AcrossEmptyLines
-AllowShortLambdasOnASingleLine: All
-AllowShortIfStatementsOnASingleLine: AllIfsAndElse
----
+# or more granular control:
+AllowShortFunctionsOnASingleLine: InlineOnly
+# BreakBeforeCloseBracketFunction 
+# AllowAllArgumentsOnNextLine: true
