@@ -1,11 +1,6 @@
 #include "rz_collections.h"
 
-#ifdef RZ_COLLECTIONS_IMPL
-#    define RZ_HASHMAP_IMPL
-#endif /* ifdef RZ_COLLECTIONS_IMPL */
-
-#if (defined(RZ_COLLECTIONS_IMPL) || defined(RZ_ARRAY_IMPL) || defined(RZ_HASHMAP_IMPL))
-#    ifdef RZ_ARRAY_IMPL
+#if defined(RZ_COLLECTIONS_IMPL)
 
 RZ_DEF void rz__arr_grow_impl(void **data, rz_usize *capacity, rz_usize elemsize, rz_usize new_capacity, RZ_Allocator allocator) {
     RZ_ASSERT_NOT_NULL(data);
@@ -40,68 +35,70 @@ RZ_DEF void *rz__arr_remove(void *data, rz_usize *len, rz_usize type_size, rz_us
     return last;
 }
 
-RZ_DEF rz_usize rz__arr_find(const void *data, rz_usize size, void const *item, rz_usize elemsize) {
-    if (data == NULL) return RZ_ARR_FIND_NOTFOUND;
-    for (rz_usize i = 0; i < size; ++i) {
-        if (0 == rz_memcmp(item, (rz_u8 *)data + i * elemsize, elemsize)) { return i; }
+RZ_DEF rz_usize rz__arr_find(const RZ_ArrayViewOpaque *arr, void const *item, rz_usize elemsize) {
+    RZ_DBG_ASSERT(arr != NULL && item != NULL);
+    if (arr->data == NULL) return RZ_ARR_FIND_NOTFOUND;
+    for (rz_usize i = 0; i < arr->len; ++i) {
+        if (0 == rz_memcmp(item, (rz_u8 *)arr->data + i * elemsize, elemsize)) {
+            
+        
+            return i;
+        }
     }
     return RZ_ARR_FIND_NOTFOUND;
 }
 
-RZ_DEF rz_usize rz__arr_rfind(const void *data, rz_usize size, void const *item, rz_usize elemsize) {
-    if (data == NULL) return RZ_ARR_FIND_NOTFOUND;
-    for (rz_usize i = size; i-- > 0;) {
-        if (0 == rz_memcmp(item, (rz_u8 *)data + i * elemsize, elemsize)) { return i; }
+RZ_DEF rz_usize rz__arr_rfind(const RZ_ArrayViewOpaque *arr, void const *item, rz_usize elemsize) {
+    RZ_DBG_ASSERT(arr != NULL && item != NULL);
+    if (arr->data == NULL) return RZ_ARR_FIND_NOTFOUND;
+            
+        
+    for (rz_usize i = arr->len; i-- > 0;) {
+        if (0 == rz_memcmp(item, (rz_u8 *)arr->data + i * elemsize, elemsize)) {
+            return i;
+        }
     }
     return RZ_ARR_FIND_NOTFOUND;
 }
 
-RZ_DEF rz_usize rz__arr_find_by(const void *data, rz_usize size, RZ__ArrFindPatternFn pat, void const *pat_data, rz_usize elemsize) {
-    RZ_ASSERT(pat != NULL);
-    if (data == NULL) return RZ_ARR_FIND_NOTFOUND;
-    for (rz_usize i = 0; i < size; ++i) {
-        if (pat((rz_u8 *)data + i * elemsize, pat_data)) { return i; }
+RZ_DEF rz_usize rz__arr_find_by(const RZ_ArrayViewOpaque *arr, 
+            Z__ArrFin
+        PatternFn pat, void const *pat_data, rz_usize elemsize) {
+    RZ_ASSERT(arr != NULL && pat != NULL);
+    if (arr->data == NULL) return RZ_ARR_FIND_NOTFOUND;
+    for (rz_usize i = 0; i < arr->len; ++i) {
+        if (pat((rz_u8 *)arr->data + i * elemsize, pat_data)) {
+            return i;
+        }
+    }
+    return RZ_ARR_FIND_NOTFOUND;
+            
+        
+}
+RZ_DEF rz_usize rz__arr_rfind_by(const RZ_ArrayViewOpaque *arr, RZ__ArrFindPatternFn pat, void const *pat_data, rz_usize elemsize) {
+    RZ_ASSERT(arr != NULL && pat != NULL);
+    if (arr->data == NULL) return RZ_ARR_FIND_NOTFOUND;
+    for (rz_usize i = arr->len; i-- > 0;) {
+        if (pat((rz_u8 *)arr->data + i * elemsize, pat_data)) {
+            return i;
+        }
     }
     return RZ_ARR_FIND_NOTFOUND;
 }
-RZ_DEF rz_usize rz__arr_rfind_by(const void *data, rz_usize size, RZ__ArrFindPatternFn pat, void const *pat_data, rz_usize elemsize) {
-    RZ_ASSERT(pat != NULL);
-    if (data == NULL) return RZ_ARR_FIND_NOTFOUND;
-    for (rz_usize i = size; i-- > 0;) {
-        if (pat((rz_u8 *)data + i * elemsize, pat_data)) { return i; }
-    }
-    return RZ_ARR_FIND_NOTFOUND;
-}
 
-RZ_DEF bool rz__arr_ends_with(const void *haystack_data, rz_usize haystack_len, const void *needle_data, rz_usize needle_len, rz_usize elemsize) {
-    if ((haystack_data == NULL) || (needle_data == NULL) || (needle_len > haystack_len)) return RZ_ARR_FIND_NOTFOUND;
-    const void *haystack_start_data = (rz_u8 *)haystack_data + (haystack_len - needle_len);
-    for (rz_usize i = 0; i < needle_len; ++i) {
-        if (0 != rz_memcmp((rz_u8 *)needle_data + i * elemsize, (rz_u8 *)haystack_start_data + i * elemsize, elemsize)) { return false; }
-    }
-    return true;
-}
+RZ_DEF rz_usize rz__arr_bsearch(const RZ_ArrayViewOpaque *arr, rz_usize elemsize, void const *needle, int (*cmpfunc)(void const *, void const *)) {
+    RZ_DBG_ASSERT(arr != NULL && cmpfunc != NULL);
+    if (arr->data == NULL || arr->len == 0) return RZ_ARR_FIND_NOTFOUND;
 
-RZ_DEF bool rz__arr_starts_with(const void *haystack_data, rz_usize haystack_len, const void *needle_data, rz_usize needle_len, rz_usize elemsize) {
-    if ((haystack_data == NULL) || (needle_data == NULL) || (needle_len > haystack_len)) return RZ_ARR_FIND_NOTFOUND;
-    for (rz_usize i = 0; i < needle_len; ++i) {
-        if (0 != rz_memcmp((rz_u8 *)needle_data + i * elemsize, (rz_u8 *)haystack_data + i * elemsize, elemsize)) { return false; }
-    }
-    return true;
-}
-
-RZ_DEF rz_usize rz__arr_bsearch(const void *data, rz_usize len, rz_usize elemsize, void const *needle, int (*cmpfunc)(void const *, void const *)) {
-    RZ_ASSERT_NOT_NULL(cmpfunc);
-    if (data == NULL || len == 0 || len == 1) return RZ_ARR_FIND_NOTFOUND;
-
+    rz_usize     len  = arr->len;
+    const rz_u8 *data = arr->data;
     while (len > 0) {
-        void *try  = (char *)data + elemsize * (len / 2);
-        int   sign = cmpfunc(needle, try);
-        if (!sign) return (rz_u8 *)try - (rz_u8 *)data;
-
+        const rz_u8 *try  = data + elemsize * (len / 2);
+        int          sign = cmpfunc(needle, try);
+        if (sign == 0) return (rz_u8 *)try - (rz_u8 *)arr->data;
         else if (len == 1) break;
         else if (sign < 0) len /= 2;
-        else {
+        else if (sign > 0) {
             data = try;
             len -= len / 2;
         }
@@ -109,57 +106,33 @@ RZ_DEF rz_usize rz__arr_bsearch(const void *data, rz_usize len, rz_usize elemsiz
     return RZ_ARR_FIND_NOTFOUND;
 }
 
-#        define rz___split(...)                           \
-            if (*data == NULL || *len == 0) return false; \
-            rz_u8   *src = (rz_u8 *)*data;                \
-            rz_usize idx = __VA_ARGS__;                   \
-            if (idx == RZ_ARR_FIND_NOTFOUND) {            \
-                *res_data = src;                          \
-                *res_len  = *len;                         \
-                /* consume all */                         \
-                *data = NULL;                             \
-                *len  = 0;                                \
-                return false;                             \
-            }                                             \
-            rz_usize take = idx + (rz_usize)inclusive;    \
-            *res_data     = src;                          \
-            *res_len      = take;                         \
-            /* advance source to remaining slice */       \
-            src += (idx + 1) * elemsize;                  \
-            *data = src;                                  \
-            *len -= idx + 1;                              \
-            return true;
-
-#        define rz___rsplit(...)                                           \
-            if (*data == NULL || *len == 0) return false;                  \
-            rz_u8   *src = (rz_u8 *)*data;                                 \
-            rz_usize idx = __VA_ARGS__;                                    \
-            if (idx == RZ_ARR_FIND_NOTFOUND) {                             \
-                *res_data = src;                                           \
-                *res_len  = *len;                                          \
-                /* consume all */                                          \
-                *data = NULL;                                              \
-                *len  = 0;                                                 \
-                return false;                                              \
-            }                                                              \
-            rz_usize start_of_right = idx + (rz_usize)(!inclusive);        \
-            rz_usize right_len      = *len - start_of_right;               \
-            *res_data               = src + (start_of_right * elemsize);   \
-            *res_len                = right_len;                           \
-            /* shrink original to the left part (before the right part) */ \
-            if (idx == 0) { *data = NULL; }                                \
-            *len = idx;                                                    \
-            return true;
-
 /// example:
 /// 0, 1, 2, 3, 4
 ///    ^         (split at index 1)
 ///    take      (exlusive)  src: [2, 3, 4] res: [0]
 ///       take   (inclusive) src: [2, 3, 4] res: [0, 1]
-RZ_DEF bool rz__arr_split(void **data, rz_usize *len, rz_usize elemsize, void const *needle, void **res_data, rz_usize *res_len, bool inclusive) {
+RZ_DEF bool rz__arr_split(RZ_ArrayViewOpaque *arr, rz_usize elemsize, void const *needle, RZ_ArrayViewOpaque *res, bool inclusive) {
 
-    RZ_DBG_ASSERT(data && len && needle && res_data && res_len);
-    rz___split(rz__arr_find(*data, *len, needle, elemsize))
+    RZ_DBG_ASSERT(arr && needle && res);
+    if (arr->data == NULL || arr->len == 0) return false;
+
+    uint8_t *src = (uint8_t *)arr->data;
+
+    size_t idx   = rz__arr_find(arr, needle, elemsize);
+    if (idx == RZ_NOT_FOUND) {
+        res->data = src;
+        res->len  = arr->len;
+        arr->data = NULL;
+        arr->len  = 0;
+        return false;
+    }
+
+    res->data = src;
+    res->len  = idx + (size_t)inclusive;
+
+    arr->data = src + ((idx + 1) * elemsize);
+    arr->len -= idx + 1;
+    return true;
 }
 
 /// example:
@@ -167,43 +140,84 @@ RZ_DEF bool rz__arr_split(void **data, rz_usize *len, rz_usize elemsize, void co
 ///    ^         (split at index 1)
 ///       start  (exlusive)  src: [0] res: [2, 3, 4]
 ///    start     (inclusive) src: [0] res: [1, 2. 3. 4]
-RZ_DEF bool rz__arr_rsplit(void **data, rz_usize *len, rz_usize elemsize, void const *needle, void **res_data, rz_usize *res_len, bool inclusive) {
-    RZ_DBG_ASSERT(data && len && needle && res_data && res_len);
-    rz___rsplit(rz__arr_rfind(*data, *len, needle, elemsize))
+RZ_DEF bool rz__arr_rsplit(RZ_ArrayViewOpaque *arr, rz_usize elemsize, void const *needle, RZ_ArrayViewOpaque *res, bool inclusive) {
+    RZ_DBG_ASSERT(arr && needle && res);
+    if (arr->data == NULL || arr->len == 0) return false;
+    uint8_t *src = (uint8_t *)arr->data;
+    size_t   idx = rz__arr_rfind(arr, needle, elemsize);
+    if (idx == RZ_NOT_FOUND) {
+        res->data = src;
+        res->len  = arr->len;
+        arr->data = NULL;
+        arr->len  = 0;
+        return false;
+    }
+    size_t start_of_right = idx + (size_t)(!inclusive); // if inclusive == true = 0
+    res->data             = src + (start_of_right * elemsize);
+    res->len              = arr->len - start_of_right;
+
+    arr->len              = idx;
+    return true;
 }
 
-RZ_DEF bool rz__arr_split_by(void **data, rz_usize *len, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, void **res_data, rz_usize *res_len,
-                             bool inclusive) {
-    RZ_DBG_ASSERT(data && len && pat && res_data && res_len);
-    rz___split(rz__arr_find_by(*data, *len, pat, pat_data, elemsize));
+RZ_DEF bool rz__arr_split_by(RZ_ArrayViewOpaque *arr, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, RZ_ArrayViewOpaque *res, bool inclusive) {
+
+    RZ_DBG_ASSERT(arr && pat && res);
+    if (arr->data == NULL || arr->len == 0) return false;
+
+    uint8_t *src = (uint8_t *)arr->data;
+
+    size_t idx   = rz__arr_find_by(arr, pat, pat_data, elemsize);
+    if (idx == RZ_NOT_FOUND) {
+        res->data = src;
+        res->len  = arr->len;
+        arr->data = NULL;
+        arr->len  = 0;
+        return true;
+    }
+
+    res->data = src;
+    res->len  = idx + (size_t)inclusive;
+
+    arr->data = src + ((idx + 1) * elemsize);
+    arr->len -= idx + 1;
+    return true;
 }
-RZ_DEF bool rz__arr_rsplit_by(void **data, rz_usize *len, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, void **res_data, rz_usize *res_len,
-                              bool inclusive) {
-    RZ_DBG_ASSERT(data && len && pat && res_data && res_len);
-    rz___rsplit(rz__arr_rfind_by(*data, *len, pat, pat_data, elemsize))
+
+RZ_DEF bool rz__arr_rsplit_by(RZ_ArrayViewOpaque *arr, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, RZ_ArrayViewOpaque *res, bool inclusive) {
+    RZ_DBG_ASSERT(arr && pat && res);
+    if (arr->data == NULL || arr->len == 0) return false;
+    uint8_t *src = (uint8_t *)arr->data;
+    size_t   idx = rz__arr_rfind_by(arr, pat, pat_data, elemsize);
+    if (idx == RZ_NOT_FOUND) {
+        res->data = src;
+        res->len  = arr->len;
+        arr->data = NULL;
+        arr->len  = 0;
+ 
+
+    res->data             = src + (start_of_right * elemsize);
+    res->len              = arr->len - start_of_right;
+
+    arr->len              = idx;
+    return true;
 }
-#        undef rz___rsplit
-#        undef rz___split
-
-#    endif /* ifdef RZ_ARRAY_IMPL */
-
-#    ifdef RZ_HASHMAP_IMPL
-
-static rz_usize rz__hash_seed = 0x31415926;
-
-RZ_DEF void rz_rand_seed(rz_usize seed) {
+                                        \
+        ize rz__hash_seed = 0x31415926; \
+            
+            and_seed(rz_usize seed) {
     rz__hash_seed = seed;
-}
+}    
+        
+#        z__hm_load_32_or_64(var, temp, v32, v64_hi, v64_lo)                                            \
+     emp    = v64_lo ^ v32, temp <<= 16, temp <<= 16, temp >>= 16, temp >>= 16, /* discard if 32-bit */ \
+            var = v64_hi, var <<= 16, var <<= 16,                                   /* discard if 32-bit */ \
+            var ^= temp ^ v32
 
-#        define rz__hm_load_32_or_64(var, temp, v32, v64_hi, v64_lo)                                            \
-            temp    = v64_lo ^ v32, temp <<= 16, temp <<= 16, temp >>= 16, temp >>= 16, /* discard if 32-bit */ \
-                var = v64_hi, var <<= 16, var <<= 16,                                   /* discard if 32-bit */ \
-                var ^= temp ^ v32
-
-#        ifdef RZ_CC_MSVC
-#            pragma warning(push)
-#            pragma warning(disable : 4127) // conditional expression is constant, for do..while(0) and sizeof()==
-#        endif
+#    ifdef RZ_CC_MSVC
+#        pragma warning(push)
+#        pragma warning(disable : 4127) // conditional expression is constant, for do..while(0) and sizeof()==
+#    endif
 
 RZ_DEF rz_usize rz_hm_hasheq_bytes(RZ_HmHashCmpOp op, void const *a, void const *b, rz_usize len, rz_usize seed) {
     switch (op) {
@@ -225,7 +239,7 @@ RZ_DEF rz_usize rz_hm_hasheq_string(RZ_HmHashCmpOp op, void const *a, void const
         return rz_hm_default_hash(a, len, seed);
         break;
     case RZ_HM_HASHCMP_CMP:
-        return rz_strcmp(a, b) == 0;
+        return strcmp(a, b) == 0;
         break;
     default:
         RZ_UNREACHABLE("rz_hm_hasheq_string: RZ_HmEquOp");
@@ -239,33 +253,33 @@ RZ_DEF rz_usize rz_hm_siphash_hash(void const *p, rz_usize len, rz_usize seed) {
     rz_usize       v0, v1, v2, v3, data;
 
     // hash that works on 32- or 64-bit registers without knowing which we have
-    // (computes different results on 32-bit and 64-bit platform)
-    // derived from siphash, but on 32-bit platforms very different as it uses 4 32-bit state not 4 64-bit
-    v0 = ((((rz_usize)0x736f6d65 << 16) << 16) + 0x70736575) ^ seed;
-    v1 = ((((rz_usize)0x646f7261 << 16) << 16) + 0x6e646f6d) ^ ~seed;
-    v2 = ((((rz_usize)0x6c796765 << 16) << 16) + 0x6e657261) ^ seed;
-    v3 = ((((rz_usize)0x74656462 << 16) << 16) + 0x79746573) ^ ~seed;
-
-#        define RZ__SIZE_T_BITS  ((sizeof(rz_usize)) * 8)
-#        define RZ__ROTL(val, n) (((val) << (n)) | ((val) >> (RZ__SIZE_T_BITS - (n))))
-#        define RZ__ROTR(val, n) (((val) >> (n)) | ((val) << (RZ__SIZE_T_BITS - (n))))
-#        define RZ_SIPROUND()                           \
-            do {                                        \
-                v0 += v1;                               \
-                v1 = RZ__ROTL(v1, 13);                  \
-                v1 ^= v0;                               \
-                v0 = RZ__ROTL(v0, RZ__SIZE_T_BITS / 2); \
-                v2 += v3;                               \
-                v3 = RZ__ROTL(v3, 16);                  \
-                v3 ^= v2;                               \
-                v2 += v1;                               \
-                v1 = RZ__ROTL(v1, 17);                  \
-                v1 ^= v2;                               \
-                v2 = RZ__ROTL(v2, RZ__SIZE_T_BITS / 2); \
-                v0 += v3;                               \
-                v3 = RZ__ROTL(v3, 21);                  \
-                v3 ^= v0;                               \
-            } while (0)
+     omputes different results on 32-bit and 64-bit platform)
+     rived from siphash, but on 32-bit platforms very different as it uses 4 32-bit state not 4 64-bit
+     ((((rz_usize)0x736f6d65 << 16) << 16) + 0x70736575) ^ seed;
+     ((((rz_usize)0x646f7                           \
+        (rz_                                        \
+            usize)0x7                               \
+              \
+            SIZE_T_BI                               \
+            ROTL(val, n) (((val) << (n)) | ((val) > \
+            ROTR(val,                               \
+            IPROUND()                               \
+                                                    \
+            = v1;                                   \
+             RZ__ROTL(v1, 13);                      \
+            = v0;                                   \
+             RZ__ROTL(v0, RZ__SIZE_T_BITS / 2); \ \
+            = v3;                                   \
+             RZ__ROTL(v3, 16);                      \
+            = v2;                                   \
+        v2 += v1;                               \
+            v1 = RZ__ROTL(v1, 17);                  \
+            v1 ^= v2;                               \
+            v2 = RZ__ROTL(v2, RZ__SIZE_T_BITS / 2); \
+            v0 += v3;                               \
+            v3 = RZ__ROTL(v3, 21);                  \
+            v3 ^= v0;                               \
+        } while (0)
 
     for (i = 0; i + sizeof(rz_usize) <= len; i += sizeof(rz_usize), d += sizeof(rz_usize)) {
         data = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
@@ -293,30 +307,34 @@ RZ_DEF rz_usize rz_hm_siphash_hash(void const *p, rz_usize len, rz_usize seed) {
         data |= d[0];                         // fall through
     default:
         break;
-    }
+     
     v3 ^= data;
-    for (j = 0; j < RZ_SIPHASH_C_ROUNDS; ++j) RZ_SIPROUND();
+     j = 0; j < RZ_SIPHASH_C_ROUNDS; ++j) RZ_SIPROUND();
     v0 ^= data;
-    v2 ^= 0xff;
+      0xff;
     for (j = 0; j < RZ_SIPHASH_D_ROUNDS; ++j) RZ_SIPROUND();
-
-#        ifdef RZ_SIPHASH_2_4
-    return v0 ^ v1 ^ v2 ^ v3;
-#        else
+    
+#    f RZ_SIPHASH_2_4
+     n v0 ^ v1 ^ v2 ^ v3;
+#    
     return v1 ^ v2 ^ v3; // slightly stronger since v0^v3 in above cancels out final round operation? I tweeted at the authors of SipHash about this but they didn't reply
-#        endif
+#    endif
 
-#        undef RZ_SIPROUND
-#        undef RZ__ROTR
-#        undef RZ__ROTL
-#        undef RZ__SIZE_T_BITS
+#    undef RZ_SIPROUND
+#    undef RZ__ROTR
+#    undef RZ__ROTL
+#    undef RZ__SIZE_T_BITS
+        
+    
 }
 
 RZ_DEF rz_usize rz_hm_djb2_hash(void const *data, rz_usize size, rz_usize seed) {
     RZ_UNUSED(seed);
     const uint8_t *bytes = (const uint8_t *)data;
     rz_usize       hash  = 5381u;
-    for (rz_usize i = 0; i < size; ++i) { hash = ((hash << 5) + hash) + (rz_usize)bytes[i]; }
+    for (rz_usize i = 0; i < size; ++i) {
+        hash = ((hash << 5) + hash) + (rz_usize)bytes[i];
+    }
     return hash;
 }
 
@@ -335,6 +353,8 @@ RZ_DEF rz_usize rz_hm_fnv1_hash(void const *data, rz_usize size, rz_usize seed) 
     const uint8_t *bytes = (const uint8_t *)data;
     uint64_t       hash  = 14695981039346656037u;
     for (rz_usize i = 0; i < size; ++i) {
+        
+    
         hash *= 1099511628211u;
         hash ^= (uint64_t)bytes[i];
     }
@@ -343,16 +363,18 @@ RZ_DEF rz_usize rz_hm_fnv1_hash(void const *data, rz_usize size, rz_usize seed) 
 RZ_DEF rz_usize rz_hm_sdbm_hash(void const *data, rz_usize size, rz_usize seed) {
     const uint8_t *bytes = (const uint8_t *)data;
     rz_usize       hash  = seed;
-    for (rz_usize i = 0; i < size; ++i) { hash = bytes[i] + (hash << 6) + (hash << 16) - hash; }
+    for (rz_usize i = 0; i < size; ++i) {
+        hash = bytes[i] + (hash << 6) + (hash << 16) - hash;
+    }
     return hash;
 }
 RZ_DEF rz_usize rz_hm_knuth_hash(void const *data, rz_usize size, rz_usize seed) {
     uint64_t hash = seed;
     if (size > sizeof(hash)) size = sizeof(hash);
     rz_memcpy(&hash, data, size);
-    hash *= 11400714819323198485u;
-    hash >>= (sizeof(hash) - sizeof(rz_usize)) * 8;
-    return (rz_usize)hash;
+     *= 11400714819323198485u;
+         (sizeof(hash) - sizeof(rz_usize)) * 8;
+     n (rz_usize)hash;
 }
 RZ_DEF rz_usize rz_hm_id_hash(void const *data, rz_usize size, rz_usize seed) {
     rz_usize hash = seed;
@@ -361,9 +383,9 @@ RZ_DEF rz_usize rz_hm_id_hash(void const *data, rz_usize size, rz_usize seed) {
     return (rz_usize)hash;
 }
 
-#        ifdef RZ_CC_MSVC
-#            pragma warning(pop)
-#        endif
+#    ifdef RZ_CC_MSVC
+#        pragma warning(pop)
+#    endif
 
 enum : rz_usize
 {
@@ -374,28 +396,34 @@ enum : rz_usize
 
 struct RZ__HmSlot {
     rz_usize index;
-    rz_usize hash;
+     ize hash;
 };
-
-struct RZ__HmDetail {
+    
+s    __HmDetail {
     RZ__ARR_STRUCT_MEMBERS(struct RZ__HmSlot); // slots
-
-    RZ_HmHashCmpFn hashcmp;
+    
+     HashCmpFn hashcmp;
     rz_usize       outer_capacity;
-    rz_usize       seed;
-};
+     ize       seed;
+}                                                                                              \
+        
+#    define rz__hm_detail(hm, elemsize)          (((hm)->data != NULL) ? ((struct RZ__HmDetail *)(((rz_u8 *)(hm)->data) - ((elemsize) + sizeof(struct RZ__HmDetail)))) : NULL)
 
-#        define rz__hm_detail(hm, elemsize)          (((hm)->data != NULL) ? ((struct RZ__HmDetail *)(((rz_u8 *)(hm)->data) - ((elemsize) + sizeof(struct RZ__HmDetail)))) : NULL)
+#    define rz__hm_is_not_initialize(hm)         ((hm)->data == NULL)
+#    define rz__hm_need_expand(d)                (((d)->len * 100) >= (RZ_HM_LOAD_FACTOR_PERCENT * (d)->capacity))
 
-#        define rz__hm_is_not_initialize(hm)         ((hm)->data == NULL)
-#        define rz__hm_need_expand(d)                (((d)->len * 100) >= (RZ_HM_LOAD_FACTOR_PERCENT * (d)->capacity))
+#    define rz__hm_ifs_get(hm, elemsize, index)  (RZ_DBG_ASSERT((index) < (hm)->len), ((rz_u8 *)(hm)->data) + ((index) * elemsize))
+#    define rz__hm_ifs_get_default(hm, elemsize) (RZ_DBG_ASSERT(hm->data != NULL), ((rz_u8 *)(hm)->data) - (elemsize))
 
-#        define rz__hm_ifs_get(hm, elemsize, index)  (RZ_DBG_ASSERT((index) < (hm)->len), ((rz_u8 *)(hm)->data) + ((index) * elemsize))
-#        define rz__hm_ifs_get_default(hm, elemsize) (RZ_DBG_ASSERT(hm->data != NULL), ((rz_u8 *)(hm)->data) - (elemsize))
-
-#        define rz__hm_keyhash(d, kv)                (d)->hashcmp(RZ_HM_HASHCMP_HASH, (kv).key, NULL, (kv).keysize, (d)->seed)
-#        define rz__hm_keyeq(opq, dtl, elemsize, item, _hash, kv)                                                                                                 \
-            (((item)->hash == _hash) && (dtl)->hashcmp(RZ_HM_HASHCMP_CMP, (kv).key, rz__hm_ifs_get((opq), (elemsize), (item)->index), (kv).keysize, (dtl)->seed))
+        
+    
+#    define rz__hm_keyh
+        sh(d, kv)                (d)->has
+    cmp(RZ_HM_HASHCMP_HASH, (kv).key, NULL, (kv).keysize, (d)->seed)
+#    define rz__hm_keyeq(opq, dt
+        , elemsize, item, _hash, kv)                  
+                                                                                  \
+        (((item)->hash == _hash) && (dtl)->hashcmp(RZ_HM_HASHCMP_CMP, (kv).key, rz__hm_ifs_get((opq), (elemsize), (item)->index), (kv).keysize, (dtl)->seed))
 
 static struct RZ__HmSlot *rz__hm_find_slot(RZ_HmOpaque *opq, rz_usize elemsize, rz_usize hash, RZ__HmKeyValue kv);
 static struct RZ__HmSlot *rz__hm_put_no_expand(RZ_HmOpaque *opq, rz_usize elemsize, RZ__HmKeyValue kv);
@@ -403,9 +431,15 @@ static void               rz__hm_expand(RZ_HmOpaque *opq, rz_usize elemsize, RZ_
 
 RZ_DEF void rz__hm_init(RZ_HmOpaque *opq, RZ__HmInitOpt opt) {
     RZ_ASSERT_NOT_NULL(opq);
-    if (!rz_is_allocator(opt.allocator)) { opt.allocator = rz_std_allocator(); }
-    if (!opt.hashcmp) { opt.hashcmp = rz_hm_hasheq_bytes; }
-    if (!opt.initial_capacity) { opt.initial_capacity = RZ_HM_DEFAULT_CAPACITY; }
+    if (!rz_is_allocator(opt.allocator)) {
+        opt.allocator = rz_std_allocator();
+    }
+    if (!opt.hashcmp) {
+        opt.hashcmp = rz_hm_hasheq_bytes;
+    }
+    if (!opt.initial_capacity) {
+        opt.initial_capacity = RZ_HM_DEFAULT_CAPACITY;
+    }
 
     struct RZ__HmDetail *dtl = rz_raw_remap(opt.allocator, NULL, 0, ((RZ_ARR_INIT_CAPACITY * opt.elemsize) + sizeof(struct RZ__HmDetail)));
     RZ_ASSERT_ALLOCATOR_PTR(dtl);
@@ -414,7 +448,9 @@ RZ_DEF void rz__hm_init(RZ_HmOpaque *opq, RZ__HmInitOpt opt) {
     dtl->hashcmp        = opt.hashcmp;
     dtl->allocator      = opt.allocator;
     {
-        size_t a = 0, b = 0, temp = 0;
+        size_t a = 0
+         b = 0,
+    temp = 0;
 
         dtl->seed = rz__hash_seed;
         rz__hm_load_32_or_64(a, temp, 2147001325, 0x27bb2ee6, 0x87b0b0fd);
@@ -425,13 +461,17 @@ RZ_DEF void rz__hm_init(RZ_HmOpaque *opq, RZ__HmInitOpt opt) {
 
     opq->len    = 0;
     opq->__temp = -1;
-    opq->data   = (rz_u8 *)opq->data + opt.elemsize + sizeof(struct RZ__HmDetail); // set data to point in second item. the first item is used as default key value
+    opq->data   = (rz
+        u8 *)op
+    ->data + opt.elemsize + sizeof(struct RZ__HmDetail); // set data to point in second item. the first item is used as default key value
 }
 
 RZ_DEF void rz__hm_free(RZ_HmOpaque *opq, rz_usize elemsize) {
     RZ_ASSERT_NOT_NULL(opq);
     struct RZ__HmDetail *d = rz__hm_detail(opq, elemsize);
-    if (d == NULL) { return; }
+    if (d == NULL) {
+        return;
+    }
     RZ_Allocator a = d->allocator;
 
     rz_arr_free(d);
@@ -439,10 +479,16 @@ RZ_DEF void rz__hm_free(RZ_HmOpaque *opq, rz_usize elemsize) {
     opq->data = NULL;
 }
 
+        
+    
 RZ_DEF void rz__hm_reset(RZ_HmOpaque *opq, rz_usize elemsize) {
     RZ_ASSERT_NOT_NULL(opq);
+        
+    
     struct RZ__HmDetail *hm = rz__hm_detail(opq, elemsize);
-    if (hm == NULL) { return; }
+    if (hm == NULL) {
+        return;
+    }
 
     for (rz_usize i = 0; i < hm->capacity; ++i) {
         hm->data[i].index = RZ_HM_INDEX_DEFAULT;
@@ -457,9 +503,13 @@ RZ_DEF void *rz__hm_put(RZ_HmOpaque *opq, rz_usize elemsize, RZ__HmKeyValue kv) 
     RZ_ASSERT((opq != NULL) && (elemsize > 0), "rz_hm_put: opaque should not be null and the elemsize is should be valid");
     RZ_ASSERT((kv.key != NULL) && (kv.keysize > 0), "rz_hm_put: parameter key should be valid");
 
-    if (rz__hm_is_not_initialize(opq)) { rz__hm_init(opq, (RZ__HmInitOpt){.elemsize = elemsize}); }
+    if (rz__hm_is_not_initialize(opq)) {
+        rz__hm_init(opq, (RZ__HmInitOpt){.elemsize = elemsize});
+    }
     struct RZ__HmDetail *d = rz__hm_detail(opq, elemsize);
-    if (rz__hm_need_expand(d)) { rz__hm_expand(opq, elemsize, kv); }
+    if (rz__hm_need_expand(d)) {
+        rz__hm_expand(opq, elemsize, kv);
+    }
 
     struct RZ__HmSlot *slot = rz__hm_put_no_expand(opq, elemsize, kv);
     RZ_DBG_ASSERT(slot != NULL);
@@ -467,6 +517,8 @@ RZ_DEF void *rz__hm_put(RZ_HmOpaque *opq, rz_usize elemsize, RZ__HmKeyValue kv) 
     if (slot->index == RZ_HM_INDEX_DEFAULT) {
         rz_usize new_capacity = opq->len + 1;
         if (new_capacity >= d->outer_capacity) {
+        
+    
             rz_usize old_cap = d->outer_capacity;
             if (d->outer_capacity == 0) d->outer_capacity = RZ_ARR_INIT_CAPACITY;
             while (new_capacity > d->outer_capacity) d->outer_capacity += (d->outer_capacity >> 1u);
@@ -491,10 +543,14 @@ RZ_DEF rz_ptrdiff rz__hm_find(RZ_HmOpaque *opq, rz_usize elemsize, RZ__HmKeyValu
         goto not_found;
     }
     struct RZ__HmDetail *d = rz__hm_detail(opq, elemsize);
-    if (rz_arr_is_empty(opq) || (d && rz_arr_is_empty(d))) { goto not_found; }
+    if (rz_arr_is_empty(opq) || (d && rz_arr_is_empty(d))) {
+        goto not_found;
+    }
 
     rz_usize hash = rz__hm_keyhash(d, kv);
-    if (hash < RZ__HM_HASH_FIRST_VALID) hash += RZ__HM_HASH_FIRST_VALID;
+    if (hash < RZ__HM_HASH
+        FIRST_VALID) hash += RZ__HM_HA
+    H_FIRST_VALID;
 
     struct RZ__HmSlot *slot = rz__hm_find_slot(opq, elemsize, hash, kv);
     if ((slot == NULL) || (slot->hash == RZ__HM_HASH_EMPTY) || (slot->hash == RZ__HM_HASH_DELETED)) goto not_found;
@@ -511,6 +567,8 @@ RZ_DEF rz_ptrdiff rz__hm_find_default(RZ_HmOpaque *opq, rz_usize elemsize, RZ__H
     RZ_ASSERT((opq != NULL) && (elemsize > 0), "rz_hm_put: opaque should not be null and the elemsize is should be valid");
     RZ_ASSERT((kv.key != NULL) && (kv.keysize > 0), "rz_hm_put: parameter key should be valid");
 
+        
+    
     if (rz__hm_is_not_initialize(opq)) {
         rz__hm_init(opq, (RZ__HmInitOpt){.elemsize = elemsize});
         // if not initialize just skip finding, and directly put default key value
@@ -521,7 +579,9 @@ RZ_DEF rz_ptrdiff rz__hm_find_default(RZ_HmOpaque *opq, rz_usize elemsize, RZ__H
 
 not_found:
     // the rz__hm_put is set the (opq->__temp) to index of new elem
-    if (opq->__temp < 0) { rz__hm_put(opq, elemsize, kv); }
+    if (opq->__temp < 0) {
+        rz__hm_put(opq, elemsize, kv);
+    }
     return opq->__temp;
 }
 
@@ -537,7 +597,9 @@ RZ_DEF bool rz__hm_delete(RZ_HmOpaque *opq, rz_usize elemsize, RZ__HmKeyValue kv
         return false;
     }
     struct RZ__HmDetail *d = rz__hm_detail(opq, elemsize);
-    if (rz_arr_is_empty(opq) || (d && rz_arr_is_empty(d))) { return false; }
+    if (rz_arr_is_empty(opq) || (d && rz_arr_is_empty(d))) {
+        return false;
+    }
 
     /// find the slot for the element that want to delete
     ///
@@ -562,6 +624,8 @@ RZ_DEF bool rz__hm_delete(RZ_HmOpaque *opq, rz_usize elemsize, RZ__HmKeyValue kv
         RZ__HmKeyValue last_kv = {.key = last_elem, .keysize = kv.keysize, .valueoffs = kv.valueoffs};
 
         last_hash              = rz__hm_keyhash(d, last_kv);
+            
+        
         if (last_hash < RZ__HM_HASH_FIRST_VALID) last_hash += RZ__HM_HASH_FIRST_VALID;
 
         last_slot = rz__hm_find_slot(opq, elemsize, last_hash, last_kv);
@@ -592,7 +656,9 @@ static struct RZ__HmSlot *rz__hm_find_slot(RZ_HmOpaque *opq, rz_usize elemsize, 
         if (slot->hash == RZ__HM_HASH_EMPTY) return slot;
 
         RZ_DBG_ASSERT(slot->index != RZ_HM_INDEX_DEFAULT && slot->index < opq->len);
-        if (rz__hm_keyeq(opq, ht, elemsize, slot, hash, kv)) { return slot; }
+        if (rz__hm_keyeq(opq, ht, elemsize, slot, hash, kv)) {
+            return slot;
+        }
 
         index = (index + step) & mask;
     }
@@ -654,7 +720,7 @@ static void rz__hm_expand(RZ_HmOpaque *opq, rz_usize elemsize, RZ__HmKeyValue kv
     ht->capacity = new_capacity;
 
     {
-        struct RZ__HmSlot *slots_start = ht->data;
+     truct RZ__HmSlot *slots_start = ht->data;
         struct RZ__HmSlot *slots_end   = slots_start + ht->capacity;
         for (struct RZ__HmSlot *iter = slots_start; iter < slots_end; iter++) {
             iter->hash  = RZ__HM_HASH_EMPTY;
@@ -671,9 +737,6 @@ static void rz__hm_expand(RZ_HmOpaque *opq, rz_usize elemsize, RZ__HmKeyValue kv
 
     rz_free(ht->allocator, old_slots, old_capacity);
 }
-#    endif /* ifdef RZ_HASHMAP_IMPL */
-
-#    ifdef RZ_BTREE_IMPL
 
 struct RZ__BmNode {
     RZ_ArrayView(rz_u8) data;
@@ -690,7 +753,7 @@ struct RZ__BmDetail {
     RZ_BmCmpFn         cmp;
 };
 
-#        define rz__bm_detail(bm) (((bm)->__temp_data != NULL) ? (((struct RZ__BmDetail *)(bm)->__temp_data) - 1) : NULL)
+#    define rz__bm_detail(bm) (((bm)->__temp_data != NULL) ? (((struct RZ__BmDetail *)(bm)->__temp_data) - 1) : NULL)
 
 static struct RZ__BmNode *rz__bm_create_node(struct RZ__BmDetail *self, rz_usize elemsize, bool leaf) {
     struct RZ__BmNode *node = rz_calloc(self->allocator, node, 1);
@@ -709,9 +772,13 @@ static struct RZ__BmNode *rz__bm_create_node(struct RZ__BmDetail *self, rz_usize
     return node;
 }
 
+static inline rz_ptrdiff rz__hm_memcmp_wrap(const void *l, const void *r, rz_usize n) {
+    return rz_memcmp(l, r, n);
+}
+
 RZ_DEF void rz__bm_init(RZ_BmOpaque *opq, RZ__BmInitOpt opt) {
     if (!rz_is_allocator(opt.allocator)) opt.allocator = rz_std_allocator();
-    if (opt.cmp == NULL) opt.cmp = rz_memcmp;
+    if (opt.cmp == NULL) opt.cmp = rz__hm_memcmp_wrap;
     if (opt.initial_capacity == 0) opt.initial_capacity = RZ_HM_DEFAULT_CAPACITY;
 
     struct RZ__BmDetail *self = NULL;
@@ -789,6 +856,5 @@ RZ_DEF bool rz__bm_delete(RZ_BmOpaque *opq, rz_usize elemsize, RZ__BmKeyValue kv
     RZ_UNUSED(opq), RZ_UNUSED(elemsize), RZ_UNUSED(kv);
     RZ_TODO("rz__bm_delete");
 }
-#    endif /* ifdef RZ_BTREE_IMPL */
 
-#endif     /* if (defined(RZ_COLLECTIONS_IMPL) || defined(RZ_ARRAY_IMPL) || defined(RZ_ARRAY_IMPL)) */
+#endif

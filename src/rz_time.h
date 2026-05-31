@@ -1,4 +1,3 @@
-
 #pragma once
 #ifndef RZ_TIME_H
 #    define RZ_TIME_H
@@ -72,10 +71,10 @@ RZ_DEC RZ_Duration rz_duration_abs_diff(RZ_Duration lhs, RZ_Duration rhs);
 /// return < 0 if lhs < rhs.
 /// return > 0 if lhs == rhs.
 /// return == 0 if lhs > rhs.
-RZ_DEC int rz_duration_cmp(RZ_Duration lhs, RZ_Duration rhs);
+RZ_DEC rz_ptrdiff rz_duration_cmp(RZ_Duration lhs, RZ_Duration rhs);
 
 typedef struct {
-    RZ_OsInstantTime t;
+    RZ_Duration t;
 } RZ_InstantTime;
 
 RZ_DEC RZ_InstantTime rz_instant_now(void);
@@ -88,10 +87,15 @@ RZ_DEC RZ_InstantTime rz_instant_add(RZ_InstantTime self, RZ_Duration duration);
 RZ_DEC RZ_InstantTime rz_instant_sub(RZ_InstantTime self, RZ_Duration duration);
 
 typedef struct {
-    RZ_OsSystemTime t;
+    RZ_Duration t;
 } RZ_SystemTime;
 
 extern const RZ_SystemTime RZ_TIME_UNIX_EPOCH;
+RZ_DEC RZ_SystemTime       rz_systemtime_from_os(RZ_OsSystemTime os);
+
+#    ifdef RZ_OS_UNIX
+RZ_DEC RZ_SystemTime rz_systemtime_from(rz_i64 tv_sec, rz_i64 tv_nsec);
+#    endif
 
 RZ_DEC RZ_SystemTime rz_systemtime_now(void);
 RZ_DEC RZ_Duration   rz_systemtime_duration_since(RZ_SystemTime self, RZ_SystemTime earlier);

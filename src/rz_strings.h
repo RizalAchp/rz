@@ -31,7 +31,7 @@ RZ_DEC rz_usize rz_strlen(const char *s);
 RZ_DEC rz_usize rz_strnlen(const char *s, rz_usize max_len);
 
 /// Dynamic String or generally called String Builder
-typedef RZ_Array(rz_char) RZ_Str;
+typedef RZ_Array(rz_char) RZ_Str, RZ_StrBuilder;
 
 RZ_DEC RZ_Str rz_str_sized_alloc(const rz_char *cstr, rz_usize size, RZ_Allocator a);
 #    define rz_str_sized(cstr, size)        rz_str_sized_alloc(cstr, size, NULL)
@@ -47,22 +47,29 @@ RZ_DEC RZ_Str rz_str_sized_alloc(const rz_char *cstr, rz_usize size, RZ_Allocato
 
 RZ_DEC RZ_Str rz_vstrf(RZ_Allocator a, const rz_char *fmt, va_list arg);
 RZ_DEC RZ_Str rz_strf(RZ_Allocator a, const rz_char *fmt, ...) RZ_PRINTF_FORMAT(2, 3);
-#    define rz_tvstrf(fmt, arg)                   rz_vstrf(rz_temp_allocator(), fmt, arg)
-#    define rz_tstrf(fmt, ...)                    rz_strf(rz_temp_allocator(), fmt, __VA_ARGS__)
+#    define rz_tvstrf(fmt, arg) rz_vstrf(rz_temp_allocator(), fmt, arg)
+#    define rz_tstrf(fmt, ...)  rz_strf(rz_temp_allocator(), fmt, __VA_ARGS__)
 
-#    define rz_str_from(a, val)                   rz_strf(a, rz_fmt(value), (_Generic(val, bool: ((val) ? "true" : "false"), default: val)))
+#    define rz_str_from(a, val) rz_strf(a, rz_fmt(value), (_Generic(val, bool: ((val) ? "true" : "false"), default: val)))
 
-#    define rz_str_append                         rz_arr_append
-#    define rz_str_free                           rz_arr_free
+#    define rz_str_append       rz_arr_append
+#    define rz_str_free         rz_arr_free
 
-#    define rz_str_append_null(s)                 rz_arr_append(s, 0)
+#    define rz_str_append_null(s)   \
+        do {                        \
+            rz_arr_append(s, '\0'); \
+            (s)->len--;             \
+        } while (0)
 #    define rz_str_append_sized_str(s, str, size) rz_arr_append_many(s, str, size)
 #    define rz_str_append_cstr(s, cstr)           rz_str_append_sized_str(s, cstr, rz_strlen(cstr))
 #    define rz_str_append_sv(s, sv)               rz_str_append_sized_str(s, (sv).data, (sv).len)
 
 #    define rz_str2sv(str)                        ((RZ_StrView){.data = (str)->data, .len = (str)->len})
 
-RZ_DEC void rz_str_appendf(RZ_Str *s, const rz_char *fmt, ...) RZ_PRINTF_FORMAT(2, 3);
+RZ_DEC void rz_str_appendvf(RZ_Str *s, const rz_char *fmt, va_list args);
+RZ_DEC void rz_str_appendf(RZ_Str *s, RZ_PRINTF_FMT(const rz_char *fmt), ...) RZ_PRINTF_FORMAT(2, 3);
+
+RZ_DEC const char *rz_str_to_cstr(RZ_Str *s);
 
 /// String View (slice of string or sized string)
 typedef RZ_ArrayView(rz_char) RZ_StrView;
@@ -71,7 +78,9 @@ typedef RZ_ArrayView(rz_char) RZ_StrView;
 #    define rz_sv_sized(cstr, size) ((RZ_StrView){.data = (char *)cstr, .len = size})
 #    define rz_sv_from_str(str)     ((RZ_StrView){.data = (char *)(str)->data, .len = (str)->len})
 #    define rz_sv_empty             rz_sv_sized(NULL, 0)
-#    define rz_sv_static(s_cstr)    ((RZ_StrView){.data = (char *)s_cstr, .len = sizeof(s_cstr)})
+#    define rz_sv_static(s_cstr)    ((RZ_StrView){.data = (char *)s_cstr, .len = sizeof(s_cstr) - 1})
+
+#    define rz_sv_is_empty(sv)      (((sv).len == 0) || ((sv).data == NULL))
 
 RZ_DEC rz_ptrdiff rz_sv_case_cmp(RZ_StrView lhs, RZ_StrView rhs);
 #    define rz_sv_case_cmp_cstr(lhs, rhs_cstr) rz_sv_case_cmp(lhs, rz_sv(rhs_cstr))
@@ -97,13 +106,15 @@ RZ_DEC rz_usize rz_sv_rfind_by(RZ_StrView sv, RZ_StrViewCharPredicate fn);
 
 #    define rz_sv_contains(sv, pat)       (rz_sv_find(sv, pat) != RZ_NOT_FOUND)
 #    define rz_sv_contains_cstr(sv, cstr) rz_sv_contains(sv, rz_sv(cstr))
-#    define rz_sv_contains_char(sv, ch)   rz_arr_contains(sv, ch)
+#    define rz_sv_contains_char(sv, ch)   (rz_sv_find_char(sv, ch) != RZ_NOT_FOUND)
 
 RZ_DEC bool rz_sv_starts_with(RZ_StrView sv, RZ_StrView starts_sv);
 #    define rz_sv_starts_with_cstr(sv, starts) rz_sv_starts_with(sv, rz_sv(starts))
+#    define rz_sv_starts_with_char(sv, ch)     ((sv.len == 0 || sv.data == NULL) ? false : (sv.datap[0] == ch))
 
 RZ_DEC bool rz_sv_ends_with(RZ_StrView sv, RZ_StrView ends_sv);
 #    define rz_sv_ends_with_cstr(sv, ends) rz_sv_ends_with(sv, rz_sv(ends))
+#    define rz_sv_ends_with_char(sv, ch)   ((sv.len == 0 || sv.data == NULL) ? false : (sv.data[sv.len - 1] == ch))
 
 RZ_DEC RZ_StrView rz_sv_trim_prefix_char(RZ_StrView sv, rz_char ch);
 RZ_DEC RZ_StrView rz_sv_trim_suffix_char(RZ_StrView sv, rz_char ch);

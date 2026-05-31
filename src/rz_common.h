@@ -7,98 +7,7 @@
 #define RZ_IMPLEMENTATION
 #ifndef RZ_COMMON_H
 #    define RZ_COMMON_H
-
-#    ifdef RZ_IMPLEMENTATION
-#        define RZ_ALLOC_IMPL
-#        define RZ_ALLOC_ALL_IMPL
-
-#        define RZ_COLLECTIONS_IMPL
-#        define RZ_STRING_IMPL
-#        define RZ_SPRINTF_IMPL
-#        define RZ_ARGPARSE_IMPL
-#    endif
-
-#    ifdef RZ_ARGPARSE_IMPL
-#        ifndef RZ_HASHMAP_IMPL
-#            define RZ_HASHMAP_IMPL
-#        endif
-#    endif
-
-#    ifdef RZ_COLLECTIONS_IMPL
-#        define RZ_ARRAY_IMPL
-#        define RZ_HASHMAP_IMPL
-#        define RZ_BTREE_IMPL
-#    endif /* ifdef RZ_COLLECTIONS_IMPL */
-
-#    ifdef RZ_HASHMAP_IMPL
-#        ifndef RZ_ARRAY_IMPL
-#            define RZ_ARRAY_IMPL
-#        endif
-#    endif
-
-#    ifdef RZ_BTREE_IMPL
-#        ifndef RZ_ARRAY_IMPL
-#            define RZ_ARRAY_IMPL
-#        endif
-#    endif
-
-#    ifdef RZ_STRING_IMPL
-#        ifndef RZ_ARRAY_IMPL
-#            define RZ_ARRAY_IMPL
-#        endif
-#    endif
-
-#    ifdef RZ_ARRAY_IMPL
-#        define RZ_ALLOC_IMPL
-#    endif
-
-#    ifdef RZ_ALLOC_ALL_IMPL
-#        ifndef RZ_ALLOC_IMPL
-#            define RZ_ALLOC_IMPL
-#        endif
-#        ifndef RZ_ALLOC_STD_IMPL
-#            define RZ_ALLOC_STD_IMPL
-#        endif
-#        ifndef RZ_ALLOC_PAGE_IMPL
-#            define RZ_ALLOC_PAGE_IMPL
-#        endif
-#        ifndef RZ_ALLOC_ARENA_IMPL
-#            define RZ_ALLOC_ARENA_IMPL
-#        endif
-#        ifndef RZ_ALLOC_TEMP_IMPL
-#            define RZ_ALLOC_TEMP_IMPL
-#        endif
-#    endif
-
-#    ifdef RZ_ALLOC_STD_IMPL
-#        ifndef RZ_ALLOC_IMPL
-#            define RZ_ALLOC_IMPL
-#        endif
-#    endif
-
-#    ifdef RZ_ALLOC_PAGE_IMPL
-#        ifndef RZ_ALLOC_IMPL
-#            define RZ_ALLOC_IMPL
-#        endif
-#    endif
-
-#    ifdef RZ_ALLOC_TEMP_IMPL
-#        ifndef RZ_ALLOC_ARENA_IMPL
-#            define RZ_ALLOC_ARENA_IMPL
-#        endif
-#        ifndef RZ_ALLOC_IMPL
-#            define RZ_ALLOC_IMPL
-#        endif
-#    endif
-
-#    ifdef RZ_ALLOC_ARENA_IMPL
-#        ifndef RZ_ALLOC_IMPL
-#            define RZ_ALLOC_IMPL
-#        endif
-#    endif
-
-#    ifdef RZ_SPRINTF_IMPL
-#    endif
+#    include "template.rz.h"
 
 #    ifndef RZ_DEF
 #        define RZ_DEF
@@ -124,14 +33,15 @@
 #        define RZ_OS_WINDOWS
 #    elif defined(__EMSCRIPTEN__)
 #        define RZ_OS_EMSCRIPTEN
-#    elif defined(__HAIKU__)
-#        define RZ_OS_HAIKU
 #    elif defined(__wasi__)
 #        define RZ_OS_WASI
-#    elif defined(__unix)
+#    elif (defined(__unix) || defined(__unix__))
 #        define RZ_OS_UNIX
 #        if defined(__APPLE__)
 #            define RZ_OS_APPLE
+#            if defined(__MACH__)
+#                define RZ_OS_MACOS
+#            endif
 #        endif
 #        if defined(__FreeBSD__)
 #            define RZ_OS_FREEBSD
@@ -142,7 +52,10 @@
 #        if defined(__OpenBSD__)
 #            define RZ_OS_OPENBSD
 #        endif
-#        if defined(__linux__)
+#        if defined(__ANDROID__)
+#            define RZ_OS_ANDROID
+#        endif
+#        if (defined(__linux__) || defined(linux) || defined(__linux))
 #            define RZ_OS_LINUX
 #        endif
 #    else
@@ -198,9 +111,11 @@
 #        error "Unknown Bits. only supported (64bit and 32bit) "
 #    endif
 
+#    include <errno.h>
 #    include <limits.h>
 #    include <stdalign.h>
 #    include <stdarg.h>
+#    include <stdatomic.h>
 #    include <stdbool.h>
 #    include <stddef.h>
 #    include <stdint.h>
@@ -215,10 +130,11 @@
 // #        define _WINGDI_
 // #        define _IMM_
 // #        define _WINCON_
-#        include <intrin.h>
 #        include <windows.h>
 
 #        include <direct.h>
+#        include <intrin.h>
+#        include <intsafe.h>
 #        include <io.h>
 #        include <shellapi.h>
 
@@ -234,10 +150,6 @@
 #        include <sys/types.h>
 #        include <sys/wait.h>
 #        include <unistd.h>
-#    endif
-
-#    if defined(RZ_OS_HAIKU)
-#        include <image.h>
 #    endif
 
 #    if defined(RZ_OS_APPLE)
@@ -263,6 +175,7 @@
 #    define rz_uptr      uintptr_t
 #    define rz_iptr      intptr_t
 #    define rz_char      char
+#    define rz_wchar     wchar_t
 #    define rz_int       int
 
 #    define RZ_U8_MIN    0
@@ -281,6 +194,8 @@
 #    define RZ_U64_MAX   UINT64_MAX
 #    define RZ_I64_MIN   INT64_MIN
 #    define RZ_I64_MAX   INT64_MAX
+
+#    define RZ_USIZE_MAX SIZE_MAX
 
 #    define RZ_MAX(A, B) (((A) > (B)) ? (A) : (B))
 #    define RZ_MIN(A, B) (((A) < (B)) ? (A) : (B))
@@ -453,6 +368,13 @@
 
 #    define rz_opt_unwrap(opt)              (RZ_ASSERT(opt.is_some),     opt.unwrap)
 #    define rz_result_unwrap(result)        (RZ_ASSERT(result.is_ok), result.unwrap)
+#    define rz_in_range(v, min, max)        (((v) >= (min)) && ((v) <= (max)))
+
+/* Basic non-atomic macros (operate on integer variables) */
+#    define rz_bit(bits, bit)        ((bits) & (bit))
+#    define rz_bit_set(bits, bit)    ((bits) |= (bit))
+#    define rz_bit_clear(bits, bit)  ((bits) &= ~(bit))
+#    define rz_bit_toggle(bits, bit) ((bits) ^= (bit))
 // clang-format on
 
 RZ_EXTERN_C_BEGIN
@@ -474,39 +396,50 @@ enum
     RZ_ARCH_RISCV64,
 };
 
-#    ifndef RZ_WINDOWS_MSGBOX_ERROR
-#    endif /* ifndef RZ_WINDOWS_MSGBOX_ERROR */
-
-#    if defined(RZ_OS_WINDOWS)
-#        define rz_errno GetLastError()
-#    else
-#        include <errno.h>
-#        define rz_errno errno
-#    endif
-#    ifndef MAX_BUFFER_STRERROR_LEN
-#        define MAX_BUFFER_STRERROR_LEN (4u * 1024u)
-#    endif
-
-RZ_DEF const char      *rz_strerror(void);
+// defined RZ_WINDOWS_MSGBOX_ERROR if you want panic using windows MessageBox
 RZ_DEF RZ_NORETURN void rz_panic_impl(const char *loc, RZ_PRINTF_FMT(const char *fmt), ...) RZ_PRINTF_FORMAT(2, 3);
 
-#    define RZ_ANSI_RESET          "\x1b[0m"
-#    define RZ_ANSI_BLACK          "\x1b[30m"
-#    define RZ_ANSI_RED            "\x1b[31m"
-#    define RZ_ANSI_GREEN          "\x1b[32m"
-#    define RZ_ANSI_YELLOW         "\x1b[33m"
-#    define RZ_ANSI_BLUE           "\x1b[34m"
-#    define RZ_ANSI_MAGENTA        "\x1b[35m"
-#    define RZ_ANSI_CYAN           "\x1b[36m"
-#    define RZ_ANSI_WHITE          "\x1b[37m"
-#    define RZ_ANSI_BRIGHT_BLACK   "\x1b[90m"
-#    define RZ_ANSI_BRIGHT_RED     "\x1b[91m"
-#    define RZ_ANSI_BRIGHT_GREEN   "\x1b[92m"
-#    define RZ_ANSI_BRIGHT_YELLOW  "\x1b[93m"
-#    define RZ_ANSI_BRIGHT_BLUE    "\x1b[94m"
-#    define RZ_ANSI_BRIGHT_MAGENTA "\x1b[95m"
-#    define RZ_ANSI_BRIGHT_CYAN    "\x1b[96m"
-#    define RZ_ANSI_BRIGHT_WHITE   "\x1b[97m"
+#    define RZ_ANSI_RESET             "\x1b[0m"
+#    define RZ_ANSI_BOLD              "\x1b[1m"
+#    define RZ_ANSI_DIM               "\x1b[2m"
+#    define RZ_ANSI_UNDERLINE         "\x1b[4m"
+#    define RZ_ANSI_REVERSED          "\x1b[7m"
+
+#    define RZ_ANSI_BLACK             "\x1b[30m"
+#    define RZ_ANSI_RED               "\x1b[31m"
+#    define RZ_ANSI_GREEN             "\x1b[32m"
+#    define RZ_ANSI_YELLOW            "\x1b[33m"
+#    define RZ_ANSI_BLUE              "\x1b[34m"
+#    define RZ_ANSI_MAGENTA           "\x1b[35m"
+#    define RZ_ANSI_CYAN              "\x1b[36m"
+#    define RZ_ANSI_WHITE             "\x1b[37m"
+#    define RZ_ANSI_BRIGHT_BLACK      "\x1b[90m"
+#    define RZ_ANSI_BRIGHT_RED        "\x1b[91m"
+#    define RZ_ANSI_BRIGHT_GREEN      "\x1b[92m"
+#    define RZ_ANSI_BRIGHT_YELLOW     "\x1b[93m"
+#    define RZ_ANSI_BRIGHT_BLUE       "\x1b[94m"
+#    define RZ_ANSI_BRIGHT_MAGENTA    "\x1b[95m"
+#    define RZ_ANSI_BRIGHT_CYAN       "\x1b[96m"
+#    define RZ_ANSI_BRIGHT_WHITE      "\x1b[97m"
+
+#    define RZ_ANSI_BG_BLACK          "\x1b[40m"
+#    define RZ_ANSI_BG_RED            "\x1b[41m"
+#    define RZ_ANSI_BG_GREEN          "\x1b[42m"
+#    define RZ_ANSI_BG_YELLOW         "\x1b[43m"
+#    define RZ_ANSI_BG_BLUE           "\x1b[44m"
+#    define RZ_ANSI_BG_MAGENTA        "\x1b[45m"
+#    define RZ_ANSI_BG_CYAN           "\x1b[46m"
+#    define RZ_ANSI_BG_WHITE          "\x1b[47m"
+#    define RZ_ANSI_BG_BRIGHT_BLACK   "\x1b[100m"
+#    define RZ_ANSI_BG_BRIGHT_RED     "\x1b[101m"
+#    define RZ_ANSI_BG_BRIGHT_GREEN   "\x1b[102m"
+#    define RZ_ANSI_BG_BRIGHT_YELLOW  "\x1b[103m"
+#    define RZ_ANSI_BG_BRIGHT_BLUE    "\x1b[104m"
+#    define RZ_ANSI_BG_BRIGHT_MAGENTA "\x1b[105m"
+#    define RZ_ANSI_BG_BRIGHT_CYAN    "\x1b[106m"
+#    define RZ_ANSI_BG_BRIGHT_WHITE   "\x1b[107m"
+
 RZ_DEF bool rz_isatty(FILE *f);
+
 RZ_EXTERN_C_END
 #endif /* end of include guard: RZ_COMMON_H */

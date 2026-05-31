@@ -72,48 +72,6 @@ RZ_DEC void    *rz_memcat(RZ_Allocator a, const void *l, rz_usize ln, const void
 // Create Allocator for std_allocator (using Malloc, Realloc, Free, etc)
 RZ_DEC RZ_Allocator rz_std_allocator(void);
 
-typedef struct RZ_PageAllocator RZ_PageAllocator;
-
-// Create Allocator for page_alocator
-// (On operating systems that support memory mapping, this allocator makes a syscall directly for every allocation and free.)
-RZ_DEC RZ_Allocator rz_page_allocator(void);
-
-#    if defined(RZ_OS_WINDOWS)
-typedef HANDLE RZ_Fd;
-#        define RZ_INVALID_FD INVALID_HANDLE_VALUE
-#    else
-typedef int RZ_Fd;
-#        define RZ_INVALID_FD -1
-#    endif
-
-typedef enum
-{
-    RZ_PAGE_MAP_ANON = 0,
-    RZ_PAGE_MAP_READ_ONLY,
-    RZ_PAGE_MAP_EXEC,
-    RZ_PAGE_MAP_READ_WIRITE,
-    RZ_PAGE_MAP_COPY,
-    RZ_PAGE_MAP_COPY_READ_ONLY,
-} RZ_PageAllocatorMapKind;
-
-typedef struct {
-    rz_usize                size;
-    rz_usize                offset;
-    RZ_PageAllocatorMapKind kind;
-    RZ_Fd                   fd;
-
-    bool populate;         // has no effect in windows;
-    bool no_reserve;       // has no effect in windows
-    bool stack;            // has no effect in windows
-    RZ_Opt(rz_usize) huge; // has no effect in windows;
-} RZ_PageAllocatorMapOpt;
-
-RZ_DEC void *rz_page_allocator_map_opt(RZ_PageAllocator *a, RZ_PageAllocatorMapOpt);
-#    define rz_page_allocator_map(a, _size, ...) rz_page_allocator_map_opt(a, (RZ_PageAllocatorMapOpt){.fd = RZ_INVALID_FD, .size = (_size), __VA_ARGS__})
-
-RZ_DEC void *rz_page_allocator_realloc(RZ_PageAllocator *a, void *uncasted_mem, rz_usize uncasted_mem_len, rz_usize new_len, bool may_move);
-RZ_DEC void  rz_page_allocator_unmap(RZ_PageAllocator *a, void *mem, rz_usize len);
-
 #    ifndef RZ_ARENA_REGION_DEFAULT_CAPACITY
 #        define RZ_ARENA_REGION_DEFAULT_CAPACITY (8 * 1024)
 #    endif // RZ_ARENA_REGION_DEFAULT_CAPACITY
@@ -152,11 +110,17 @@ RZ_DEC RZ_Allocator rz_temp_allocator(void);
 RZ_DEC RZ_ArenaMark rz_temp_snapshot(void);
 RZ_DEC void         rz_temp_rewind(RZ_ArenaMark m);
 
+#    define rz_tmemdup(data, size)   rz_memdup(rz_temp_allocator(), data, size)
+#    define rz_tstrdup(cstr)         rz_strdup(rz_temp_allocator(), cstr)
+#    define rz_tmemcat(l, ln, r, rn) rz_memcat(rz_temp_allocator(), l, ln, r, rn)
+
 #    define RZ_TEMP_ALLOCATOR_BLOCK(allocator, ...)                     \
         do {                                                            \
             RZ_ArenaMark __temp_allocator_mark__ = rz_temp_snapshot();  \
             RZ_Allocator allocator               = rz_temp_allocator(); \
-            do { __VA_ARGS__ } while (0);                               \
+            do {                                                        \
+                __VA_ARGS__                                             \
+            } while (0);                                                \
             rz_temp_rewind(__temp_allocator_mark__);                    \
         } while (0)
 

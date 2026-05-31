@@ -40,6 +40,9 @@
 
 #    define rz_arr_clear(da)    ((da)->len = 0)
 
+#    define rz_arr_clone(da)                               ((RZ_TYPEOF(*da)){.data = rz_memdup((da)->allocator, (da)->data, (da)->len * sizeof(*(da)->data)), .len = (da)->len, .capacity = (da)->len, .allocator = (da)->allocator})
+#    define rz_arr_clone_with_allocator(da, _allocator)    ((RZ_TYPEOF(*da)){.data = rz_memdup(_allocator, (da)->data, (da)->len * sizeof(*(da)->data)), .len = (da)->len, .capacity = (da)->len, .allocator = _allocator})
+
 ///  Free memory for the array.
 ///  the second argument is ... for ease of use. for example: rz_arr_append(&da, (Struct){.a = a, .b = c, etc})
 ///    void rz_arr_append(RZ_Array(T) *da, T item);
@@ -90,6 +93,8 @@
 #    define rz_arr_last_checked(a)       rz_arr_get(a, (a)->len - 1)
 #    define rz_arr_end(a)                ((a)->data + (a)->len)
 
+#    define rz_arr_truncate(a, _len)     do { rz_usize n = _len; if (n <= (a)->len) (a)->len = n; } while(0)
+
 ///  get element form idx from array. crash if array idx index overflow.
 ///      T  rz_arr_at(ArrayLike<T> *a, rz_usize idx);
 #    define rz_arr_at(a, idx)           (a)->data[(RZ_ASSERT((a)->len > idx), idx)]
@@ -99,9 +104,17 @@
 ///      T  rz_arr_get(ArrayLike<T> *a, rz_usize idx);
 #    define rz_arr_get(a, idx)          (((idx) < (a)->len) ? &(a)->data[idx] : NULL)
 
-///  get slice of array. return view of the type T
+///  get slice of array. return view of the type T (inclusive)
+///  - start and end is index.
+///
+///  0,1,2,3,4
+///      2   4
+///      start
+///          end
+///  data = a->data + start
+///  len  = (start - end) + 1
 ///  RZ_ArrayView<T> rz_arr_set(ArrayLike<T> *a, rz_usize start, rz_usize end);
-#    define rz_arr_view(a, start, end)  {.len = (RZ_ASSERT(((start) < (a)->len) && (end) < (a)->len), ((end) - (start))), .data = (a)->data + (start)}
+#    define rz_arr_view(view_type, a, start, end)  ((view_type){ .len = (RZ_ASSERT(((start) < (a)->len) && ((end) < (a)->len) && ((start) <= (end))), ((end) - (start) + 1)), .data = (a)->data + (start) })
 
 #    define rz_arr_reverse(a)            do { if ((a)->len > 1) { rz_usize half_len = (a)->len / 2; for (rz_usize i = 0; i < half_len; ++i) { RZ_SWAP((a)->data[i], (a)->data[((len - 1) - i)]); } } } while (0)
 
@@ -138,15 +151,15 @@
 
 ///  find item from start of array.
 ///  rz_usize rz_arr_find(ArrayLike<T> *a, T item);
-#    define rz_arr_find(a, needle)               rz__arr_find    ((a)->data, (a)->len, RZ_ADDRESSOF(*(a)->data, (needle)), sizeof(*(a)->data))
+#    define rz_arr_find(a, needle)               rz__arr_find   ((const RZ_ArrayViewOpaque *)(a), RZ_ADDRESSOF(*(a)->data, (needle)), sizeof(*(a)->data))
 ///  rz_usize rz_arr_find_by(ArrayLike<T> *a, bool(*pat_fn)(const void*item, const void *data), T pat_data);
-#    define rz_arr_find_by(a, pat_fn, pat_data)  rz__arr_find_by ((a)->data, (a)->len, pat_fn, RZ_ADDRESSOF(*(a)->data, (pat_data)), sizeof(*(a)->data))
+#    define rz_arr_find_by(a, pat_fn, pat_data)  rz__arr_find_by((const RZ_ArrayViewOpaque *)(a), pat_fn, RZ_ADDRESSOF(*(a)->data, (pat_data)), sizeof(*(a)->data))
 
 ///  find item from end of array. (reserve)
 ///  rz_usize rz_arr_rfind(ArrayLike<T> *a, T item);
-#    define rz_arr_rfind(a, needle)              rz__arr_rfind    ((a)->data, (a)->len, RZ_ADDRESSOF(*(a)->data, (needle)), sizeof(*(a)->data))
+#    define rz_arr_rfind(a, needle)              rz__arr_rfind   ((const RZ_ArrayViewOpaque *)(a), RZ_ADDRESSOF(*(a)->data, (needle)), sizeof(*(a)->data))
 ///  rz_usize rz_arr_rfind_by(ArrayLike<T> *a, bool(*pat_fn)(const void*item, const void *data), T pat_data);
-#    define rz_arr_rfind_by(a, pat_fn, pat_data) rz__arr_rfind_by ((a)->data, (a)->len, pat_fn, RZ_ADDRESSOF(*(a)->data, (pat_data)), sizeof(*(a)->data))
+#    define rz_arr_rfind_by(a, pat_fn, pat_data) rz__arr_rfind_by((const RZ_ArrayViewOpaque *)(a), pat_fn, RZ_ADDRESSOF(*(a)->data, (pat_data)), sizeof(*(a)->data))
 
 ///  check if array is containing item.
 ///  bool   rz_arr_contains(ArrayLike<T> *a, T item);
@@ -156,50 +169,56 @@
 
 ///  check if array is ends with other array (`hasystack` has suffix of `needle`)
 ///  bool   rz_arr_ends_with(ArrayLike<T> *haystack, ArrayLike<T> *needle);
-#    define rz_arr_ends_with(a, needles)      rz__arr_ends_with  ((a)->data, (a)->len, (needles)->data, (needles)->len, sizeof(*(a)->data))
-#    define rz_arr_ends_with_item(a, needle)  rz__arr_ends_with  ((a)->data, (a)->len, RZ_ADDRESSOF(*(a)->data, (needle)), 1, sizeof(*(a)->data))
+#    define rz_arr_ends_with(a, needles)      ((needles).len <= (a)->len) && rz_memcmp((a)->data + ((a)->len - (needles)->len), (needles)->data, (needles)->len * sizeof(*(a)->data))
+#    define rz_arr_ends_with_item(a, needle)  (1 <= (a)->len)             && rz_memcmp((a)->data + ((a)->len - 1), RZ_ADDRESSOF(RZ_TYPEOF(needle), needle), sizeof(needle))
 
 ///  check if array is starts with other array (`hasystack` has prefix of `needle`)
 ///  bool   rz_arr_starts_with(ArrayLike<T> *haystack, ArrayLike<T> *needle);
-#    define rz_arr_starts_with(a, needles)     rz__arr_starts_with((a)->data, (a)->len, (needles)->data, (needles)->len, sizeof(*(a)->data))
-#    define rz_arr_starts_with_item(a, needle) rz__arr_starts_with((a)->data, (a)->len, RZ_ADDRESSOF(*(a)->data, (needle)), 1, sizeof(*(a)->data))
+#    define rz_arr_starts_with(a, needles)     ((needles).len <= (a)->len) && rz_memcmp((a)->data, (needles)->data, (needles)->len * sizeof(*(a)->data))
+#    define rz_arr_starts_with_item(a, needle) (1 <= (a)->len)             && rz_memcmp((a)->data, RZ_ADDRESSOF(RZ_TYPEOF(needle), needle), sizeof(needle))
 
 ///  split array into 2 result by n (mid). first_result and last_result. (inclusive)
 ///  the left   will contains [first .. mid]. excluding the mid. and
-///  the right  will contains [mid .. end] excluding the end.
+///  the right  will contains [mid .. end].
 ///
 ///  void   rz_arr_split_to_at(const ArrayLike<T> *a, rz_usize mid, ArrayLike<T> first_result, ArrayLike<T> last_result);
-#    define rz_arr_split_to_at(a, mid, left_result, right_result) do { rz_usize at = (mid); if (at <= (a)->len) { (right_result)->data = (a)->data + at; (right_result)->len = (a)->len - at; (left_result)->data = (a)->data; (left_result)->len = at; } } while(0)
-/// just like `rz_arr_split_at` but its mutatee the self / `a` array (strip)
-///  void   rz_arr_split_self_at(ArrayLike<T> *a, rz_usize mid, ArrayLike<T> *result);
-#    define rz_arr_split_at(a, mid, result)   do { rz_usize at = (mid); if (at > (a)->len) at = (a)->len; (result)->data = (a)->data; (result)->len = at; (a)->data += at; (a)->len -= at; } while(0)
-#    define rz_arr_rsplit_at(a, mid, result)  do { rz_usize at = (mid); if (at > (a)->len) at = (a)->len; (result)->data = (a)->data + ((a)->len - at); (result)->len = at; (a)->len -= at; } while(0)
+#    define rz_arr_split_at(a, at, left_result, right_result) do {\
+        rz_usize mid = (at);                                                                 \
+        if (mid <= (a)->len) {                                                               \
+            *(left_result)  = rz_arr_view(RZ_TYPEOF(*(left_result)), a, 0, mid - 1);             \
+            *(right_result) = rz_arr_view(RZ_TYPEOF(*(right_result)), a, mid, (a)->len - 1); \
+        }                                                                                    \
+    } while(0)
+
+///  split array into 2 result by n (mid). first_result and last_result. (exclusive)
+///  the left   will contains [first .. mid]. excluding the mid. and
+///  the right  will contains [(mid + 1) .. end] excluding the mid to end.
+///
+///  void   rz_arr_split_to_at(const ArrayLike<T> *a, rz_usize mid, ArrayLike<T> first_result, ArrayLike<T> last_result);
+#    define rz_arr_split_exclusive_at(a, at, left_result, right_result) do {\
+        rz_usize mid = (at);                                                                 \
+        if (mid <= (a)->len) {                                                               \
+            *(left_result)  = rz_arr_view(RZ_TYPEOF(*(left_result)), a, 0, mid);             \
+            *(right_result) = rz_arr_view(RZ_TYPEOF(*(right_result)),a, mid + 1, (a)->len - 1); \
+        }                                                                                    \
+    } while(0)
+
 
 ///  bool  rz_arr_split(ArrayLike<T> *a, T needle, ArrayLike<T> *result);
-#    define rz_arr_split(a, needle, result)              rz__arr_split    ((void **)&(a)->data, &(a)->len, sizeof(*(a)->data), RZ_ADDRESSOF(*(a)->data, needle), (void **)&(result)->data, &(result)->len, false)
+#    define rz_arr_split(a, needle, result)           rz__arr_split((RZ_ArrayViewOpaque *)(a), sizeof(*(a)->data), RZ_ADDRESSOF(*(a)->data, needle), (RZ_ArrayViewOpaque *)(result), false)
 ///  bool  rz_arr_split_inclusive(ArrayLike<T> *a, T needle, ArrayLike<T> *result);
-#    define rz_arr_split_inclusive(a, needle, result)    rz__arr_split    ((void **)&(a)->data, &(a)->len, sizeof(*(a)->data), RZ_ADDRESSOF(*(a)->data, needle), (void **)&(result)->data, &(result)->len, true)
+#    define rz_arr_split_inclusive(a, needle, result) rz__arr_split((RZ_ArrayViewOpaque *)(a), sizeof(*(a)->data), RZ_ADDRESSOF(*(a)->data, needle), (RZ_ArrayViewOpaque *)(result), true)
 
-#    define rz_arr_split_by(a, pat_fn, pat_data, result)           rz__arr_split_by ((void **)&(a)->data, &(a)->len, sizeof(*(a)->data), pat_fn, RZ_ADDRESSOF(*(a)->data, pat_data), (void **)&(result)->data, &(result)->len, false)
-#    define rz_arr_split_inclusive_by(a, pat_fn, pat_data, result) rz__arr_split_by ((void **)&(a)->data, &(a)->len, sizeof(*(a)->data), pat_fn, RZ_ADDRESSOF(*(a)->data, pat_data), (void **)&(result)->data, &(result)->len, true)
+#    define rz_arr_split_by(a, pat_fn, pat_data, result)           rz__arr_split_by((RZ_ArrayViewOpaque *)(a), sizeof(*(a)->data), pat_fn, RZ_ADDRESSOF(*(a)->data, pat_data), (RZ_ArrayViewOpaque *)(result), false)
+#    define rz_arr_split_inclusive_by(a, pat_fn, pat_data, result) rz__arr_split_by((RZ_ArrayViewOpaque *)(a), sizeof(*(a)->data), pat_fn, RZ_ADDRESSOF(*(a)->data, pat_data), (RZ_ArrayViewOpaque *)(result), true)
 
 ///  bool   rz_arr_rsplit(ArrayLike<T> *a, T needle, ArrayLike<T> *result);
-#    define rz_arr_rsplit(a, needle, result)           rz__arr_rsplit((void **)&(a)->data, &(a)->len, sizeof(*(a)->data), RZ_ADDRESSOF(*(a)->data, needle), (void **)&(result)->data, &(result)->len, false)
+#    define rz_arr_rsplit(a, needle, result)           rz__arr_rsplit((RZ_ArrayViewOpaque *)(a), sizeof(*(a)->data), RZ_ADDRESSOF(*(a)->data, needle), (RZ_ArrayViewOpaque *)(result), false)
 ///  bool   rz_arr_rsplit_inclusive(ArrayLike<T> *a, T needle, ArrayLike<T> *result);
-#    define rz_arr_rsplit_inclusive(a, needle, result) rz__arr_rsplit((void **)&(a)->data, &(a)->len, sizeof(*(a)->data), RZ_ADDRESSOF(*(a)->data, needle), (void **)&(result)->data, &(result)->len, true)
+#    define rz_arr_rsplit_inclusive(a, needle, result) rz__arr_rsplit((RZ_ArrayViewOpaque *)(a), sizeof(*(a)->data), RZ_ADDRESSOF(*(a)->data, needle), (RZ_ArrayViewOpaque *)(result), true)
 
-#    define rz_arr_rsplit_by(a, pat_fn, pat_data, result)           rz__arr_rsplit_by ((void **)&(a)->data, &(a)->len, sizeof(*(a)->data), pat_fn, RZ_ADDRESSOF(*(a)->data, pat_data), (void **)&(result)->data, &(result)->len, false)
-#    define rz_arr_rsplit_inclusive_by(a, pat_fn, pat_data, result) rz__arr_rsplit_by ((void **)&(a)->data, &(a)->len, sizeof(*(a)->data), pat_fn, RZ_ADDRESSOF(*(a)->data, pat_data), (void **)&(result)->data, &(result)->len, true)
-
-///  strip / strip array by n (len) or strip from left (prefix).
-///  void   rz_arr_strip_n(ArrayLike<T> *a, rz_usize len);
-#    define rz_arr_strip_prefix_n(a, n)             do { auto i = n; if (i < (a)->len) { (a)->data += i; (a)->len -= i; } }while(0)
-#    define rz_arr_strip_prefix(a, needle, prefix)  rz_arr_split_inclusive(a, needle, prefix)
-
-///  strip / strip array by n (len), in reverse or strip from right (suffix).
-///  void   rz_arr_rstrip_n(ArrayLike<T> *a, rz_usize len);
-#    define rz_arr_strip_suffix_n(a, n)             do { auto i = n; if (i < (a)->len) { (a)->len -= i; } }while(0)
-#    define rz_arr_strip_suffix(a, needle, prefix)  rz_arr_rsplit_inclusive(a, needle, prefix)
+#    define rz_arr_rsplit_by(a, pat_fn, pat_data, result)           rz__arr_rsplit_by((RZ_ArrayViewOpaque *)(a), sizeof(*(a)->data), pat_fn, RZ_ADDRESSOF(*(a)->data, pat_data), (RZ_ArrayViewOpaque *)(result), false)
+#    define rz_arr_rsplit_inclusive_by(a, pat_fn, pat_data, result) rz__arr_rsplit_by((RZ_ArrayViewOpaque *)(a), sizeof(*(a)->data), pat_fn, RZ_ADDRESSOF(*(a)->data, pat_data), (RZ_ArrayViewOpaque *)(result), true)
 
 ///  binary search array. 
 ///  rz_usize rz_arr_bsearch(ArrayLike<T> *a, T needle,  int(*cmpfunc)(void const *, void const *));
@@ -359,7 +378,7 @@
 #    define RZ__HM_IS_OPAQUE_CONVARTIBLE(hm_t)  RZ_STATIC_ASSERT(((RZ_OFFSETOF(hm_t, len) == RZ_OFFSETOF(RZ_HmOpaque, len)) && (RZ_OFFSETOF(hm_t, data) == RZ_OFFSETOF(RZ_HmOpaque, data))), #hm_t " not convertable to RZ_HmOpaque")
 /// rz__hmkeyvalue(typekv, _key) (internal use)
 /// Build an RZ__HmKeyValue temporary describing the key used in the call.
-#    define rz__hmkeyvalue(typekv, _key)        ((RZ__HmKeyValue){.key = RZ_ADDRESSOF((typekv)->key, _key), .keysize = sizeof(key), .valueoffs = RZ_OFFSETOF(RZ_TYPEOF(typekv), value)})
+#    define rz__hmkeyvalue(typekv, _key)        ((RZ__HmKeyValue){.key = RZ_ADDRESSOF((typekv)->key, _key), .keysize = sizeof(_key), .valueoffs = RZ_OFFSETOF(RZ_TYPEOF(*typekv), value)})
 /// rz__hm_call(fn, hm, _key) (internal use)
 /// helper for calling hm function
 #    define rz__hm_call(fn, hm, _key)           rz__hm_##fn((RZ_HmOpaque *)hm, sizeof(*(hm)->data), rz__hmkeyvalue((hm)->data, (_key)))
@@ -431,7 +450,8 @@
 ///  Value *v = rz_hm_get(&mymap, some_key);
 ///  *v = new_value;
 /// 
-#    define rz_hm_get(hm, _key)          (hm = rz__hm_call(get,          hm, _key), &(hm)->data[(hm)->__temp].value);   RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm))
+#    define rz_hm_get(hm, _key)          (hm = rz__hm_call(get, hm, _key), &(hm)->data[(hm)->__temp].value);   RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm))
+#    define rz_hm_find_get(hm, _key)     ((void)rz__hm_call(find, hm, _key), ((hm)->__temp == -1) ? NULL : &(hm)->data[(hm)->__temp].value);   RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm))
 
 /// bool rz_hm_put(RZ_Hm(Key, Value) hm, Key _key, Value _value)
 /// 
@@ -444,7 +464,7 @@
 ///  - If you intend to set only the `value` member for an existing key, use
 ///    rz_hm_get and write to the `value` field directly.
 /// 
-#    define rz_hm_put(hm, _key, _value)  (hm = rz__hm_call(put,          hm, _key), (hm)->data[(hm)->__temp].value = _value); RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm))
+#    define rz_hm_put(hm, _key, _value)  ((void)rz__hm_call(put,          hm, _key), (hm)->data[(hm)->__temp].value = _value); RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm))
 
 /// ---- convenience alias macros for sets (RZ_Hs) ----
 /// 
@@ -460,6 +480,8 @@
 #    define rz_hs_get                rz_hm_get
 #    define rz_hs_put(hm, _key)      { rz__hm_call(put, hm, _key); RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm)); } while(0)
 
+
+#    define rz_hm_foreach rz_foreach
 
 ///////////////
 /// Bm (BtreeMap) and Bs (BtreeSet) Macors helpers
@@ -508,23 +530,17 @@ RZ_DEC void *rz__arr_remove(void *data, rz_usize *len, rz_usize type_size, rz_us
 
 // RZ_DEC rz_usize rz__slice_rfind(RZ_ArrayViewOpaque *s, rz_usize type_size, void *item);
 
-RZ_DEC rz_usize rz__arr_find(const void *data, rz_usize size, void const *item, rz_usize elemsize);
-RZ_DEC rz_usize rz__arr_rfind(const void *data, rz_usize size, void const *item, rz_usize elemsize);
+RZ_DEC rz_usize rz__arr_find(const RZ_ArrayViewOpaque *arr, void const *item, rz_usize elemsize);
+RZ_DEC rz_usize rz__arr_rfind(const RZ_ArrayViewOpaque *arr, void const *item, rz_usize elemsize);
+RZ_DEC rz_usize rz__arr_find_by(const RZ_ArrayViewOpaque *arr, RZ__ArrFindPatternFn pat, void const *pat_data, rz_usize elemsize);
+RZ_DEC rz_usize rz__arr_rfind_by(const RZ_ArrayViewOpaque *arr, RZ__ArrFindPatternFn pat, void const *pat_data, rz_usize elemsize);
 
-RZ_DEC rz_usize rz__arr_find_by(const void *data, rz_usize size, RZ__ArrFindPatternFn pat, void const *pat_data, rz_usize elemsize);
-RZ_DEC rz_usize rz__arr_rfind_by(const void *data, rz_usize size, RZ__ArrFindPatternFn pat, void const *pat_data, rz_usize elemsize);
+RZ_DEC rz_usize rz__arr_bsearch(const RZ_ArrayViewOpaque *data, rz_usize elemsize, void const *needle, int (*cmpfunc)(void const *, void const *));
 
-RZ_DEC bool rz__arr_ends_with(const void *haystack_data, rz_usize haystack_len, const void *needle_data, rz_usize needle_len, rz_usize elemsize);
-RZ_DEC bool rz__arr_starts_with(const void *haystack_data, rz_usize haystack_len, const void *needle_data, rz_usize needle_len, rz_usize elemsize);
-
-RZ_DEC rz_usize rz__arr_bsearch(const void *data, rz_usize len, rz_usize elemsize, void const *needle, int (*cmpfunc)(void const *, void const *));
-RZ_DEC bool     rz__arr_split(void **data, rz_usize *len, rz_usize elemsize, void const *needle, void **res_data, rz_usize *res_len, bool inclusive);
-RZ_DEC bool     rz__arr_rsplit(void **data, rz_usize *len, rz_usize elemsize, void const *needle, void **res_data, rz_usize *res_len, bool inclusive);
-
-RZ_DEC bool rz__arr_split_by(void **data, rz_usize *len, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, void **res_data, rz_usize *res_len,
-                             bool inclusive);
-RZ_DEC bool rz__arr_rsplit_by(void **data, rz_usize *len, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, void **res_data, rz_usize *res_len,
-                              bool inclusive);
+RZ_DEC bool rz__arr_split(RZ_ArrayViewOpaque *arr, rz_usize elemsize, void const *needle, RZ_ArrayViewOpaque *res, bool inclusive);
+RZ_DEC bool rz__arr_rsplit(RZ_ArrayViewOpaque *arr, rz_usize elemsize, void const *needle, RZ_ArrayViewOpaque *res, bool inclusive);
+RZ_DEC bool rz__arr_split_by(RZ_ArrayViewOpaque *arr, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, RZ_ArrayViewOpaque *res, bool inclusive);
+RZ_DEC bool rz__arr_rsplit_by(RZ_ArrayViewOpaque *arr, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, RZ_ArrayViewOpaque *res, bool inclusive);
 
 ///////////////
 /// Hm (HashMap) & Hs (HashSet) Imlementation details

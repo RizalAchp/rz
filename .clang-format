@@ -27,7 +27,7 @@ AlignTrailingComments:
 
 AllowShortIfStatementsOnASingleLine: AllIfsAndElse
 AllowShortLoopsOnASingleLine: true
-AllowShortBlocksOnASingleLine: Always
+# AllowShortBlocksOnASingleLine: Always
 AllowShortEnumsOnASingleLine: true
 
 BreakBeforeBraces: Custom

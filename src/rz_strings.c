@@ -119,6 +119,10 @@ RZ_DEF RZ_Str rz_strf(RZ_Allocator a, const rz_char *fmt, ...) {
     return str;
 }
 
+RZ_DEC void rz_str_appendvf(RZ_Str *s, const rz_char *fmt, va_list args) {
+    rz_str_append_cstr(s, rz_avsprintf(s->allocator, fmt, args));
+}
+
 RZ_DEF void rz_str_appendf(RZ_Str *s, const rz_char *fmt, ...) {
     va_list arg;
     va_start(arg, fmt);
@@ -126,6 +130,11 @@ RZ_DEF void rz_str_appendf(RZ_Str *s, const rz_char *fmt, ...) {
     va_end(arg);
 }
 #    endif
+
+RZ_DEC const char *rz_str_to_cstr(RZ_Str *s) {
+    rz_str_append_null(s);
+    return s->data;
+}
 
 RZ_DEF rz_ptrdiff rz_sv_case_cmp(RZ_StrView lhs, RZ_StrView rhs) {
     // Handle empty sv
@@ -226,7 +235,9 @@ RZ_DEF RZ_StrView rz_sv_trim_prefix_char(RZ_StrView sv, rz_char ch) {
 
 RZ_DEF RZ_StrView rz_sv_trim_suffix_char(RZ_StrView sv, rz_char ch) {
     size_t i = 0;
-    while (i < sv.len && sv.data[sv.len - 1 - i] == ch) { i += 1; }
+    while (i < sv.len && sv.data[sv.len - 1 - i] == ch) {
+        i += 1;
+    }
     return rz_sv_sized(sv.data, sv.len - i);
 }
 
@@ -242,7 +253,9 @@ RZ_DEF RZ_StrView rz_sv_trim_prefix_by(RZ_StrView sv, RZ_StrViewCharPredicate fn
 
 RZ_DEF RZ_StrView rz_sv_trim_suffix_by(RZ_StrView sv, RZ_StrViewCharPredicate fn) {
     size_t i = 0;
-    while (i < sv.len && fn(sv.data[sv.len - 1 - i])) { i += 1; }
+    while (i < sv.len && fn(sv.data[sv.len - 1 - i])) {
+        i += 1;
+    }
     return rz_sv_sized(sv.data, sv.len - i);
 }
 
@@ -252,26 +265,30 @@ RZ_DEF RZ_StrView rz_sv_trim_by(RZ_StrView sv, RZ_StrViewCharPredicate fn) {
 
 RZ_DEF RZ_StrView rz_sv_strip_nprefix(RZ_StrView *sv, rz_usize n) {
     RZ_StrView result = {0};
-    rz_arr_split_at(sv, n, &result);
+    rz_arr_split_at(sv, n, &result, sv);
     return result;
 }
 
 RZ_DEF RZ_StrView rz_sv_strip_nsuffix(RZ_StrView *sv, rz_usize n) {
     RZ_StrView result = {0};
-    rz_arr_rsplit_at(sv, n, &result);
+    rz_arr_split_at(sv, n, sv, &result);
     return result;
 }
 
 RZ_DEF RZ_StrView rz_sv_strip_prefix_while(RZ_StrView *sv, RZ_StrViewCharPredicate pred) {
     size_t i = 0;
-    while (i < sv->len && pred(sv->data[i])) { i += 1; }
+    while (i < sv->len && pred(sv->data[i])) {
+        i += 1;
+    }
 
     return rz_sv_strip_nprefix(sv, i);
 }
 
 RZ_DEF RZ_StrView rz_sv_strip_suffix_while(RZ_StrView *sv, RZ_StrViewCharPredicate pred) {
     size_t i = 0;
-    while (i < sv->len && pred(sv->data[sv->len - 1 - i])) { i += 1; }
+    while (i < sv->len && pred(sv->data[sv->len - 1 - i])) {
+        i += 1;
+    }
 
     return rz_sv_strip_nsuffix(sv, i);
 }

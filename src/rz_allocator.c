@@ -1,5 +1,4 @@
 #include "rz_allocator.h"
-#include <stdatomic.h>
 
 #if defined(RZ_OS_APPLE)
 #    if RZ_ARCH_TAG == RZ_ARCH_X86_64
@@ -249,99 +248,7 @@ void rz__astd_dealloc(void *a, void *mem, rz_usize mem_len) {
 #endif /* ifdef RZ_ALLOC_STD_IMPL */
 
 #ifdef RZ_ALLOC_PAGE_IMPL
-#    ifdef RZ_OS_OPENBSD
-#        define RZ__APAGE_ENABLE_HINTS 0
-#    else
-#        define RZ__APAGE_ENABLE_HINTS 1
-#    endif
 
-typedef struct RZ_PageAllocator {
-    bool stack_direction;
-#    if RZ__APAGE_ENABLE_HINTS
-    alignas(RZ_PAGE_SIZE_MIN) rz_u8 *addr_hint;
-#    endif
-} RZ_PageAllocator;
-
-#    if (RZ__APAGE_ENABLE_HINTS && !defined(RZ_OS_WINDOWS))
-#        define RZ__STACK_DIR_DOWN false
-#        define RZ__STACK_DIR_UP   true
-/// return stack direction in bool (DOWN: false, UP: true)
-RZ_NOINLINE RZ_NODISCARD static bool rz__stack_direction(void) {
-    volatile size_t a = {0};
-    volatile size_t b = {0};
-    return !(&b < &a);
-}
-#    endif
-
-static void *rz__page_allocator_alloc(void *a, rz_usize size);
-static void *rz__page_allocator_remap(void *a, void *mem, rz_usize mem_len, rz_usize new_len);
-static void  rz__page_allocator_dealloc(void *a, void *mem, rz_usize mem_len);
-
-static RZ_PageAllocator rz__page_allocator = {0};
-RZ_DEF RZ_Allocator     rz_page_allocator(void) {
-    static const RZ_AllocatorVTable vtable = {
-            .alloc   = rz__page_allocator_alloc,
-            .remap   = rz__page_allocator_remap,
-            .dealloc = rz__page_allocator_dealloc,
-    };
-    return (RZ_Allocator){.ptr = &rz__page_allocator, .vtable = &vtable};
-}
-
-void *rz__page_allocator_alloc(void *a, rz_usize size) {
-    RZ_ASSERT(size > 0);
-    return rz_page_allocator_map(a, size, .kind = RZ_PAGE_MAP_ANON);
-}
-void *rz__page_allocator_remap(void *a, void *mem, rz_usize mem_len, rz_usize new_len) {
-    return rz_page_allocator_realloc(a, mem, mem_len, new_len, true);
-}
-void rz__page_allocator_dealloc(void *a, void *mem, rz_usize mem_len) {
-    rz_page_allocator_unmap(a, mem, mem_len);
-}
-
-#    if defined(RZ_OS_WINDOWS)
-#        define STATUS_SUCCESS 0x00000000
-typedef LONG                               NTSTATUS;
-__kernel_entry NTSYSCALLAPI NTSTATUS NTAPI NtAllocateVirtualMemory(HANDLE ProcessHandle, PVOID *BaseAddress, ULONG_PTR ZeroBits, PSIZE_T RegionSize, ULONG AllocationType,
-                                                                   ULONG Protect);
-__kernel_entry NTSYSCALLAPI NTSTATUS NTAPI NtFreeVirtualMemory(HANDLE ProcessHandle, PVOID *BaseAddress, PSIZE_T RegionSize, ULONG FreeType);
-#    endif
-
-RZ_DEF void *rz_page_allocator_map_opt(RZ_PageAllocator *a, RZ_PageAllocatorMapOpt opt) {
-    RZ_ASSERT_NOT_NULL(a);
-
-#    if defined(RZ_OS_UNIX)
-    int populate     = 0;
-    int stack        = 0;
-    int no_reserve   = 0;
-    int hugetlb      = 0;
-    int hugetlb_size = 0;
-#        if defined(RZ_OS_LINUX)
-    populate = (opt.populate) ? MAP_POPULATE : 0;
-#            if defined(RZ_OS_ANDROID) || defined(RZ_OS_FREEBSD)
-    stack = MAP_STACK;
-#            endif
-#        endif
-    no_reserve = MAP_NORESERVE;
-#    endif
-
-    RZ_UNUSED(opt);
-    RZ_TODO("rz_page_allocator_map_opt");
-}
-
-RZ_DEF void *rz_page_allocator_realloc(RZ_PageAllocator *a, void *uncasted_mem, rz_usize uncasted_mem_len, rz_usize new_len, bool may_move) {
-    RZ_UNUSED(a);
-    RZ_UNUSED(uncasted_mem), RZ_UNUSED(uncasted_mem_len), RZ_UNUSED(new_len), RZ_UNUSED(may_move);
-    RZ_TODO("rz_page_allocator_realloc");
-}
-
-RZ_DEF void rz_page_allocator_unmap(RZ_PageAllocator *a, void *mem, rz_usize len) {
-    RZ_UNUSED(a);
-#    if defined(RZ_OS_WINDOWS)
-    VirtualFreeEx(GetCurrentProcess(), mem, len, MEM_RELEASE);
-#    else
-    munmap(mem, len);
-#    endif
-}
 #endif /* ifdef RZ_ALLOC_PAGE_IMPL */
 
 #ifdef RZ_ALLOC_ARENA_IMPL
@@ -391,7 +298,9 @@ void *rz__arena_alloc(void *opaque, rz_usize size_bytes) {
         a->begin = a->end;
     }
 
-    while ((a->end->count + size) > a->end->capacity && a->end->next != NULL) { a->end = a->end->next; }
+    while ((a->end->count + size) > a->end->capacity && a->end->next != NULL) {
+        a->end = a->end->next;
+    }
 
     if ((a->end->count + size) > a->end->capacity) {
         RZ_ASSERT(a->end->next == NULL);
@@ -439,7 +348,9 @@ RZ_ArenaMark rz_arena_snapshot(RZ_ArenaAllocator *a) {
     return m;
 }
 void rz_arena_reset(RZ_ArenaAllocator *a) {
-    for (RZ_ArenaAllocatorRegion *r = a->begin; r != NULL; r = r->next) { r->count = 0; }
+    for (RZ_ArenaAllocatorRegion *r = a->begin; r != NULL; r = r->next) {
+        r->count = 0;
+    }
 
     a->end = a->begin;
 }
@@ -451,7 +362,9 @@ void rz_arena_rewind(RZ_ArenaAllocator *a, RZ_ArenaMark m) {
     }
 
     m.region->count = m.count;
-    for (RZ_ArenaAllocatorRegion *r = m.region->next; r != NULL; r = r->next) { r->count = 0; }
+    for (RZ_ArenaAllocatorRegion *r = m.region->next; r != NULL; r = r->next) {
+        r->count = 0;
+    }
 
     a->end = m.region;
 }

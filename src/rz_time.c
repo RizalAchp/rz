@@ -1,5 +1,4 @@
 #include "rz_time.h"
-#include <intsafe.h>
 
 static inline bool rz__add_u64(rz_u64 lhs, rz_u64 rhs, rz_u64 *result) {
 #if defined(RZ_CC_MSVC)
@@ -107,7 +106,7 @@ RZ_DEF RZ_Duration rz_duration_mins(rz_u64 mins) {
     return rz_duration_secs(mins * RZ_TIME_SECS_PER_MINUTE);
 }
 
-RZ_DEC RZ_Duration rz_duration_add(RZ_Duration lhs, RZ_Duration rhs) {
+RZ_DEF RZ_Duration rz_duration_add(RZ_Duration lhs, RZ_Duration rhs) {
     RZ_Duration result = {0};
     if (rz_duration_checked_add(lhs, rhs, &result)) return result;
     RZ_PANIC("rz_duration_add overflow");
@@ -135,7 +134,7 @@ RZ_DEF RZ_Duration rz_duration_saturating_add(RZ_Duration lhs, RZ_Duration rhs) 
     return result;
 }
 
-RZ_DEC RZ_Duration rz_duration_sub(RZ_Duration lhs, RZ_Duration rhs) {
+RZ_DEF RZ_Duration rz_duration_sub(RZ_Duration lhs, RZ_Duration rhs) {
     RZ_Duration result = {0};
     if (rz_duration_checked_sub(lhs, rhs, &result)) return result;
     RZ_PANIC("rz_duration_sub overflow");
@@ -169,7 +168,7 @@ RZ_DEF RZ_Duration rz_duration_abs_diff(RZ_Duration lhs, RZ_Duration rhs) {
     return result;
 }
 
-RZ_DEF int rz_duration_cmp(RZ_Duration lhs, RZ_Duration rhs) {
+RZ_DEF rz_ptrdiff rz_duration_cmp(RZ_Duration lhs, RZ_Duration rhs) {
     // if (lhs.secs < rhs.secs) return -1;
     // else if (lhs.secs > rhs.secs) return 1;
     // else if (lhs.nanos < rhs.nanos) return -1;
@@ -277,7 +276,7 @@ RZ_DEF RZ_InstantTime rz_instant_now(void) {
     return result;
 }
 
-RZ_DEC RZ_Duration rz_instant_duration_since(RZ_InstantTime self, RZ_InstantTime earlier) {
+RZ_DEF RZ_Duration rz_instant_duration_since(RZ_InstantTime self, RZ_InstantTime earlier) {
     RZ_Duration result = {0};
     if (rz_instant_checked_duration_since(self, earlier, &result)) return result;
     result.secs  = 0;
@@ -285,7 +284,7 @@ RZ_DEC RZ_Duration rz_instant_duration_since(RZ_InstantTime self, RZ_InstantTime
     return result;
 }
 
-RZ_DEC bool rz_instant_checked_duration_since(RZ_InstantTime self, RZ_InstantTime earlier, RZ_Duration *result) {
+RZ_DEF bool rz_instant_checked_duration_since(RZ_InstantTime self, RZ_InstantTime earlier, RZ_Duration *result) {
 #if defined(RZ_OS_WINDOWS)
     RZ_Duration epsilon = rz__perfcounter_epsilon();
     if ((rz_duration_cmp(earlier.t, self.t) > 0) && (rz_duration_cmp(rz_duration_sub(earlier.t, self.t), epsilon) <= 0)) {
@@ -301,11 +300,11 @@ RZ_DEC bool rz_instant_checked_duration_since(RZ_InstantTime self, RZ_InstantTim
 #endif
 }
 
-RZ_DEC RZ_Duration rz_instant_elapsed(RZ_InstantTime self) {
+RZ_DEF RZ_Duration rz_instant_elapsed(RZ_InstantTime self) {
     return rz_instant_duration_since(rz_instant_now(), self);
 }
 
-RZ_DEC bool rz_instant_checked_add(RZ_InstantTime self, RZ_Duration duration, RZ_InstantTime *result) {
+RZ_DEF bool rz_instant_checked_add(RZ_InstantTime self, RZ_Duration duration, RZ_InstantTime *result) {
 #if defined(RZ_OS_WINDOWS)
     return rz_duration_checked_add(self.t, duration, &result->t);
 #elif defined(RZ_OS_UNIX)
@@ -318,7 +317,7 @@ RZ_DEC bool rz_instant_checked_add(RZ_InstantTime self, RZ_Duration duration, RZ
 #endif
 }
 
-RZ_DEC bool rz_instant_checked_sub(RZ_InstantTime self, RZ_Duration duration, RZ_InstantTime *result) {
+RZ_DEF bool rz_instant_checked_sub(RZ_InstantTime self, RZ_Duration duration, RZ_InstantTime *result) {
 #if defined(RZ_OS_WINDOWS)
     return rz_duration_checked_sub(self.t, duration, &result->t);
 #elif defined(RZ_OS_UNIX)
@@ -331,13 +330,13 @@ RZ_DEC bool rz_instant_checked_sub(RZ_InstantTime self, RZ_Duration duration, RZ
 #endif
 }
 
-RZ_DEC RZ_InstantTime rz_instant_add(RZ_InstantTime self, RZ_Duration duration) {
+RZ_DEF RZ_InstantTime rz_instant_add(RZ_InstantTime self, RZ_Duration duration) {
     RZ_InstantTime result;
     if (rz_instant_checked_add(self, duration, &result)) return result;
     RZ_PANIC("overflow when adding RZ_Duratioin on RZ_InstantTime");
 }
 
-RZ_DEC RZ_InstantTime rz_instant_sub(RZ_InstantTime self, RZ_Duration duration) {
+RZ_DEF RZ_InstantTime rz_instant_sub(RZ_InstantTime self, RZ_Duration duration) {
     RZ_InstantTime result;
     if (rz_instant_checked_sub(self, duration, &result)) return result;
     RZ_PANIC("overflow when subtracting RZ_Duratioin on RZ_InstantTime");
@@ -345,11 +344,11 @@ RZ_DEC RZ_InstantTime rz_instant_sub(RZ_InstantTime self, RZ_Duration duration) 
 
 #if defined(RZ_OS_WINDOWS)
 #    define RZ_TIME_INTERVALS_PER_SEC (RZ_TIME_NANOS_PER_SEC / 100)
-#    define rz__systemtime_from_interval(intervals)                        \
-        ((RZ_SystemTime){.t = (RZ_OsSystemTime){                           \
-                             .dwLowDateTime  = (DWORD)intervals,           \
-                             .dwHighDateTime = (DWORD)((intervals) >> 32), \
-                         }})
+#    define rz__systemtime_from_interval(intervals)       \
+        rz_systemtime_from_os((RZ_OsSystemTime){          \
+            .dwLowDateTime  = (DWORD)intervals,           \
+            .dwHighDateTime = (DWORD)((intervals) >> 32), \
+        })
 #    define rz__systemtime_intervals(st) ((rz_i64)(st).t.dwLowDateTime) | (((rz_i64)(st).t.dwHighDateTime) << 32)
 const RZ_SystemTime RZ_TIME_UNIX_EPOCH = rz__systemtime_from_interval(11644473600 * RZ_TIME_INTERVALS_PER_SEC);
 #elif defined(RZ_OS_UNIX)
@@ -358,40 +357,45 @@ const RZ_SystemTime RZ_TIME_UNIX_EPOCH = {0};
 const RZ_SystemTime RZ_TIME_UNIX_EPOCH = {0};
 #endif
 
-RZ_DEF RZ_SystemTime rz_systemtime_now(void) {
-    RZ_SystemTime result = {0};
-#if defined(RZ_OS_WINDOWS)
-    GetSystemTimePreciseAsFileTime(&result.t);
-#elif defined(RZ_OS_UNIX)
-    if (clock_gettime(CLOCK_REALTIME, &result.t) != 0) RZ_PANIC("system function `clock_gettime()` failed");
-#endif
-    return result;
+RZ_DEF RZ_SystemTime rz_systemtime_from_os(RZ_OsSystemTime ostime) {
+    RZ_UNUSED(ostime);
+    RZ_TODO("rz_systemtime_from_os");
 }
 
-RZ_DEC RZ_Duration rz_systemtime_duration_since(RZ_SystemTime self, RZ_SystemTime earlier) {
+RZ_DEF RZ_SystemTime rz_systemtime_now(void) {
+    RZ_OsSystemTime f = {0};
+#if defined(RZ_OS_WINDOWS)
+    GetSystemTimePreciseAsFileTime(&f);
+#elif defined(RZ_OS_UNIX)
+    if (clock_gettime(CLOCK_REALTIME, &f) != 0) RZ_PANIC("system function `clock_gettime()` failed");
+#endif
+    return rz_systemtime_from_os(f);
+}
+
+RZ_DEF RZ_Duration rz_systemtime_duration_since(RZ_SystemTime self, RZ_SystemTime earlier) {
     RZ_Duration result = {0};
     if (rz_systemtime_checked_duration_since(self, earlier, &result)) return result;
     result.secs  = 0;
     result.nanos = 0;
     return result;
 }
-RZ_DEC bool rz_systemtime_checked_duration_since(RZ_SystemTime self, RZ_SystemTime earlier, RZ_Duration *result) {
+RZ_DEF bool rz_systemtime_checked_duration_since(RZ_SystemTime self, RZ_SystemTime earlier, RZ_Duration *result) {
     RZ_UNUSED(self), RZ_UNUSED(earlier), RZ_UNUSED(result);
     RZ_TODO("rz_systemtime_checked_duration_since");
 }
 
-RZ_DEC RZ_Duration rz_systemtime_elapsed(RZ_SystemTime self) {
+RZ_DEF RZ_Duration rz_systemtime_elapsed(RZ_SystemTime self) {
     return rz_systemtime_duration_since(rz_systemtime_now(), self);
 }
 
-RZ_DEC bool rz_systemtime_checked_add(RZ_SystemTime self, RZ_Duration duration, RZ_SystemTime *result) {
+RZ_DEF bool rz_systemtime_checked_add(RZ_SystemTime self, RZ_Duration duration, RZ_SystemTime *result) {
     RZ_UNUSED(self);
     RZ_UNUSED(duration);
     RZ_UNUSED(result);
     RZ_TODO("rz_systemtime_checked_add");
 }
 
-RZ_DEC bool rz_systemtime_checked_sub(RZ_SystemTime self, RZ_Duration duration, RZ_SystemTime *result) {
+RZ_DEF bool rz_systemtime_checked_sub(RZ_SystemTime self, RZ_Duration duration, RZ_SystemTime *result) {
 
     RZ_UNUSED(self);
     RZ_UNUSED(duration);
@@ -399,13 +403,13 @@ RZ_DEC bool rz_systemtime_checked_sub(RZ_SystemTime self, RZ_Duration duration, 
     RZ_TODO("rz_systemtime_checked_sub");
 }
 
-RZ_DEC RZ_SystemTime rz_systemtime_add(RZ_SystemTime self, RZ_Duration duration) {
+RZ_DEF RZ_SystemTime rz_systemtime_add(RZ_SystemTime self, RZ_Duration duration) {
     RZ_SystemTime result;
     if (rz_systemtime_checked_add(self, duration, &result)) return result;
     RZ_PANIC("overflow when adding RZ_Duratioin on RZ_SystemTime");
 }
 
-RZ_DEC RZ_SystemTime rz_systemtime_sub(RZ_SystemTime self, RZ_Duration duration) {
+RZ_DEF RZ_SystemTime rz_systemtime_sub(RZ_SystemTime self, RZ_Duration duration) {
     RZ_SystemTime result;
     if (rz_systemtime_checked_sub(self, duration, &result)) return result;
     RZ_PANIC("overflow when subtracting RZ_Duratioin on RZ_SystemTime");
