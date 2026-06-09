@@ -13,11 +13,11 @@ static rz_i32 rz__real_to_parts(rz_i64 *bits, rz_i32 *expo, double value);
 #    define RZ__SPECIAL 0x7000
 #endif
 
-static void           rz__lead_sign(rz_u32 fl, char *sign);
-static RZ_ASAN rz_u32 rz__strlen_limited(char const *s, rz_u32 limit);
-static char          *rz__clamp_callback(const char *buf, void *user, int len);
-static char          *rz__count_clamp_callback(const char *buf, void *user, int len);
-static void           rz__raise_to_power10(double *ohi, double *olo, double d, rz_i32 power); // power can be -323 to +350
+static void   rz__lead_sign(rz_u32 fl, char *sign);
+static rz_u32 rz__strlen_limited(char const *s, rz_u32 limit);
+static char  *rz__clamp_callback(const char *buf, void *user, int len);
+static char  *rz__count_clamp_callback(const char *buf, void *user, int len);
+static void   rz__raise_to_power10(double *ohi, double *olo, double d, rz_i32 power); // power can be -323 to +350
 
 static char rz__period = '.';
 static char rz__comma  = ',';
@@ -62,7 +62,7 @@ static void rz__lead_sign(rz_u32 fl, char *sign) {
     }
 }
 
-static RZ_ASAN rz_u32 rz__strlen_limited(char const *s, rz_u32 limit) {
+static rz_u32 rz__strlen_limited(char const *s, rz_u32 limit) {
     char const *sn = s;
 
     // get up to 4-byte alignment
@@ -120,12 +120,16 @@ RZ_DEF int rz_vsprintfcb(RZ_SprintfCallback *callback, void *user, char *buf, ch
             if (0 == (bf = buf = callback(buf, user, len))) goto done; \
         }                                                              \
     }
-#define rz__chk_cb_buf(bytes)                     \
-    {                                             \
-        if (callback) { rz__chk_cb_bufL(bytes); } \
+#define rz__chk_cb_buf(bytes)       \
+    {                               \
+        if (callback) {             \
+            rz__chk_cb_bufL(bytes); \
+        }                           \
     }
-#define rz__flush_cb()                                                                        \
-    { rz__chk_cb_bufL(RZ_SPRINTF_MIN - 1); } // flush if there is even one byte in the buffer
+#define rz__flush_cb()                                 \
+    {                                                  \
+        rz__chk_cb_bufL(RZ_SPRINTF_MIN - 1);           \
+    } // flush if there is even one byte in the buffer
 #define rz__cb_buf_clamp(cl, v)                    \
     cl = v;                                        \
     if (callback) {                                \
@@ -1086,7 +1090,9 @@ static char *rz__clamp_callback(const char *buf, void *user, int len) {
             d  = c->buf;
             s  = buf;
             se = buf + len;
-            do { *d++ = *s++; } while (s < se);
+            do {
+                *d++ = *s++;
+            } while (s < se);
         }
         c->buf += len;
         c->count -= len;
@@ -1173,11 +1179,15 @@ static rz_i32 rz__real_to_parts(rz_i64 *bits, rz_i32 *expo, double value) {
     return (rz_i32)((rz_u64)b >> 63);
 }
 
-static double const rz__bot[23]       = {1e+000, 1e+001, 1e+002, 1e+003, 1e+004, 1e+005, 1e+006, 1e+007, 1e+008, 1e+009, 1e+010, 1e+011, 1e+012, 1e+013, 1e+014, 1e+015, 1e+016, 1e+017, 1e+018, 1e+019, 1e+020, 1e+021, 1e+022};
-static double const rz__negbot[22]    = {1e-001, 1e-002, 1e-003, 1e-004, 1e-005, 1e-006, 1e-007, 1e-008, 1e-009, 1e-010, 1e-011, 1e-012, 1e-013, 1e-014, 1e-015, 1e-016, 1e-017, 1e-018, 1e-019, 1e-020, 1e-021, 1e-022};
-static double const rz__negboterr[22] = {-5.551115123125783e-018,  -2.0816681711721684e-019, -2.0816681711721686e-020, -4.7921736023859299e-021, -8.1803053914031305e-022, 4.5251888174113741e-023, 4.5251888174113739e-024,  -2.0922560830128471e-025,
-                                         -6.2281591457779853e-026, -3.6432197315497743e-027, 6.0503030718060191e-028,  2.0113352370744385e-029,  -3.0373745563400371e-030, 1.1806906454401013e-032, -7.7705399876661076e-032, 2.0902213275965398e-033,
-                                         -7.1542424054621921e-034, -7.1542424054621926e-035, 2.4754073164739869e-036,  5.4846728545790429e-037,  9.2462547772103625e-038,  -4.8596774326570872e-039};
+static double const rz__bot[23]       = {1e+000, 1e+001, 1e+002, 1e+003, 1e+004, 1e+005, 1e+006, 1e+007, 1e+008, 1e+009, 1e+010, 1e+011,
+                                         1e+012, 1e+013, 1e+014, 1e+015, 1e+016, 1e+017, 1e+018, 1e+019, 1e+020, 1e+021, 1e+022};
+static double const rz__negbot[22]    = {1e-001, 1e-002, 1e-003, 1e-004, 1e-005, 1e-006, 1e-007, 1e-008, 1e-009, 1e-010, 1e-011,
+                                         1e-012, 1e-013, 1e-014, 1e-015, 1e-016, 1e-017, 1e-018, 1e-019, 1e-020, 1e-021, 1e-022};
+static double const rz__negboterr[22] = {-5.551115123125783e-018, -2.0816681711721684e-019, -2.0816681711721686e-020, -4.7921736023859299e-021, -8.1803053914031305e-022,
+                                         4.5251888174113741e-023, 4.5251888174113739e-024,  -2.0922560830128471e-025, -6.2281591457779853e-026, -3.6432197315497743e-027,
+                                         6.0503030718060191e-028, 2.0113352370744385e-029,  -3.0373745563400371e-030, 1.1806906454401013e-032,  -7.7705399876661076e-032,
+                                         2.0902213275965398e-033, -7.1542424054621921e-034, -7.1542424054621926e-035, 2.4754073164739869e-036,  5.4846728545790429e-037,
+                                         9.2462547772103625e-038, -4.8596774326570872e-039};
 static double const rz__top[13]       = {1e+023, 1e+046, 1e+069, 1e+092, 1e+115, 1e+138, 1e+161, 1e+184, 1e+207, 1e+230, 1e+253, 1e+276, 1e+299};
 static double const rz__negtop[13]    = {1e-023, 1e-046, 1e-069, 1e-092, 1e-115, 1e-138, 1e-161, 1e-184, 1e-207, 1e-230, 1e-253, 1e-276, 1e-299};
 static double const rz__toperr[13]    = {8388608,
@@ -1193,12 +1203,14 @@ static double const rz__toperr[13]    = {8388608,
                                          6.3641293062232429e+236,
                                          -5.2069140800249813e+259,
                                          -5.2504760255204387e+282};
-static double const rz__negtoperr[13] = {3.9565301985100693e-040,  -2.299904345391321e-063, 3.6506201437945798e-086,  1.1875228833981544e-109,  -5.0644902316928607e-132, -6.7156837247865426e-155, -2.812077463003139e-178,
-                                         -5.7778912386589953e-201, 7.4997100559334532e-224, -4.6439668915134491e-247, -6.3691100762962136e-270, -9.436808465446358e-293,  8.0970921678014997e-317};
+static double const rz__negtoperr[13] = {3.9565301985100693e-040,  -2.299904345391321e-063, 3.6506201437945798e-086,  1.1875228833981544e-109, -5.0644902316928607e-132,
+                                         -6.7156837247865426e-155, -2.812077463003139e-178, -5.7778912386589953e-201, 7.4997100559334532e-224, -4.6439668915134491e-247,
+                                         -6.3691100762962136e-270, -9.436808465446358e-293, 8.0970921678014997e-317};
 
 #    if defined(_MSC_VER) && (_MSC_VER <= 1200)
-static rz_u64 const rz__powten[20] = {1,           10,           100,           1000,           10000,           100000,           1000000,           10000000,           100000000,           1000000000,
-                                      10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000, 1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000, 10000000000000000000U};
+static rz_u64 const rz__powten[20] = {
+    1,           10,           100,           1000,           10000,           100000,           1000000,           10000000,           100000000,           1000000000,
+    10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000, 1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000, 10000000000000000000U};
 #        define rz__tento19th ((rz_u64)1000000000000000000)
 #    else
 static rz_u64 const rz__powten[20] = {1,

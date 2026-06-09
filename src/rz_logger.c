@@ -3,9 +3,10 @@
 #include "rz_allocator.h"
 #include "rz_error.h"
 #include "rz_fs.h"
+#include "rz_sprintf.h"
 #include "rz_strings.h"
 
-#define RZ_LOG_TAG "rz_logger"
+#define RZ_TAG "rz_logger"
 
 static atomic_uchar RZ__LOG_STATIC_MAX_LEVEL = (RZ_LOG_LEVEL_TRACE);
 static atomic_bool  RZ__LOG_INIT             = (false);
@@ -202,7 +203,7 @@ static bool rz__log_timestamp(RZ_StrBuilder *sb, bool color) {
 
     time_t    sec = ts.tv_sec;
     struct tm tm;
-#if defined(RZ_OS_WINDOWS)
+#if RZ_TARGET_OS_WINDOWS
     localtime_s(&tm, &sec);
 #else
     localtime_r(&sec, &tm);
@@ -279,7 +280,7 @@ static bool rz__log_level_parse(RZ_StrView s, RZ_LogLevel *level) {
     } else if (rz_sv_case_eq(s, rz_sv_static("t")) || rz_sv_case_eq(s, rz_sv_static("trace"))) {
         *level = RZ_LOG_LEVEL_TRACE;
     } else {
-        RZ_ERROR(RZ_LOG_TAG, "failed to parse log_level. required o|off,e|error,w|warning,i|info,d|debug,t|trace. but got: " RZ_SVFmt, RZ_SVArg(s));
+        RZ_ERROR_INTR("failed to parse log_level. required o|off,e|error,w|warning,i|info,d|debug,t|trace. but got: " RZ_SVFmt, RZ_SVArg(s));
         return false;
     }
     return true;
@@ -299,15 +300,14 @@ static bool rz__log_default_filter_map_parse(RZ__LogDefault *l, RZ_StrView filte
 
         rz_usize colon = rz_sv_find_char(key_value, ':');
         if (colon == RZ_NOT_FOUND) {
-            RZ_ERROR(RZ_LOG_TAG, "failed to parse log filter: `" RZ_SVFmt "`. required ':' between tag and log_level [example: $tag:$log_level]. but got none",
-                     RZ_SVArg(key_value));
+            RZ_ERROR_INTR("failed to parse log filter: `" RZ_SVFmt "`. required ':' between tag and log_level [example: $tag:$log_level]. but got none", RZ_SVArg(key_value));
             return false;
         }
         rz_arr_split_at(&key_value, colon, &key, &value);
         key   = rz_sv_trim(key);
         value = rz_sv_trim(value);
         if (rz_sv_is_empty(key) || rz_sv_is_empty(value)) {
-            RZ_ERROR(RZ_LOG_TAG, "failed to parse log filter: `" RZ_SVFmt "`. required key and value on key:value is not empty", RZ_SVArg(key_value));
+            RZ_ERROR_INTR("failed to parse log filter: `" RZ_SVFmt "`. required key and value on key:value is not empty", RZ_SVArg(key_value));
             return false;
         }
 

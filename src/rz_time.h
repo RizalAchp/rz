@@ -18,10 +18,10 @@
 #    define RZ_TIME_HOURS_PER_DAY   24
 #    define RZ_TIME_DAYS_PER_WEEK   7
 
-#    if defined(RZ_OS_UNIX)
+#    if RZ_TARGET_FAMILY_UNIX
 #        define RZ_OsInstantTime struct timespec
 #        define RZ_OsSystemTime  struct timespec
-#    elif defined(RZ_OS_WINDOWS)
+#    elif RZ_TARGET_OS_WINDOWS
 /// This duration is relative to an arbitrary microsecond
 /// epoch from the winapi QueryPerformanceCounter function.
 #        define RZ_OsInstantTime RZ_Duration
@@ -90,10 +90,12 @@ typedef struct {
     RZ_Duration t;
 } RZ_SystemTime;
 
+#    define RZ_SYSTIME_FAILED             ((RZ_SystemTime){-1, -1})
+#    define rz_systime_is_failed(systime) ((systime).t.secs == (RZ_TYPEOF((systime).t.secs))(-1))
+
 extern const RZ_SystemTime RZ_TIME_UNIX_EPOCH;
 RZ_DEC RZ_SystemTime       rz_systemtime_from_os(RZ_OsSystemTime os);
-
-#    ifdef RZ_OS_UNIX
+#    if RZ_TARGET_FAMILY_UNIX
 RZ_DEC RZ_SystemTime rz_systemtime_from(rz_i64 tv_sec, rz_i64 tv_nsec);
 #    endif
 
@@ -118,12 +120,6 @@ RZ_DEC RZ_SystemTime rz_systemtime_sub(RZ_SystemTime self, RZ_Duration duration)
 #        define rz_time_add(self, duration) _Generic((self), RZ_InstantTime: rz_instant_add, RZ_SystemTime: rz_systemtime_add)(self, earlier)
 #        define rz_time_sub(self, duration) _Generic((self), RZ_InstantTime: rz_instant_sub, RZ_SystemTime: rz_systemtime_sub)(self, earlier)
 #    endif
-
-RZ_DEC bool   rz_time_is_leap_year(rz_i32 year);
-RZ_DEC rz_u16 rz_time_days_in_year(rz_i32 year);
-RZ_DEC rz_u8  rz_time_weeks_in_year(rz_i32 year);
-RZ_DEC rz_u8  rz_time_days_in_month(rz_u8 month, rz_i32 year);
-RZ_DEC rz_u8  rz_time_days_in_month_leap(rz_u8 month, bool is_leap_year);
 
 #    ifdef __cplusplus
 } /* extern "C" */

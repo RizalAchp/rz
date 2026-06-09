@@ -9,7 +9,7 @@ RZ_DEC void rz_panic_impl(const char *loc, RZ_PRINTF_FMT(const char *fmt), ...) 
     char *msg     = rz_tsprintf("%s: PANIC: %s", loc, err_msg);
     va_end(arg);
 
-#if (defined(RZ_OS_WINDOWS) && defined(RZ_WINDOWS_MSGBOX_ERROR))
+#if RZ_TARGET_OS_WINDOWS && defined(RZ_WINDOWS_MSGBOX_ERROR)
     MessageBoxA(NULL, msg, "Error Panic", MB_OK);
     ExitProcess(1);
 #else
@@ -20,8 +20,17 @@ RZ_DEC void rz_panic_impl(const char *loc, RZ_PRINTF_FMT(const char *fmt), ...) 
 }
 
 RZ_DEC bool rz_isatty(FILE *f) {
-#ifdef RZ_OS_WINDOWS
-    return _isatty(_fileno(f));
+#if RZ_TARGET_OS_WINDOWS
+    DWORD  mode;
+    HANDLE h = (HANDLE)_get_osfhandle(_fileno(ctx->output));
+    if (h != INVALID_HANDLE_VALUE) {
+        if (GetConsoleMode(h, &mode)) {
+            SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            return true;
+            // Now ANSI sequences like \x1b[31m will work
+        }
+    }
+    return false;
 #else
     return isatty(fileno(f));
 #endif

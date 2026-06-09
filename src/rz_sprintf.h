@@ -24,7 +24,7 @@
 #    endif
 
 #    define RZ_SVFmt     "%.*s"
-#    define RZ_SVArg(sv) (int)(sv).len, (sv).data
+#    define RZ_SVArg(sv) ((int)(sv).len), (sv).data
 
 #    ifdef __cplusplus
 extern "C" {

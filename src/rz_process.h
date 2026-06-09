@@ -6,7 +6,7 @@
 #    include "rz_fs.h"
 #    include "rz_strings.h"
 
-#    ifdef RZ_OS_WINDOWS
+#    if RZ_TARGET_OS_WINDOWS
 #        define RZ_Proc         HANDLE
 #        define RZ_PROC_INVALID INVALID_HANDLE_VALUE
 #    else
@@ -14,7 +14,9 @@
 #        define RZ_PROC_INVALID -1
 #    endif
 
-RZ_EXTERN_C_BEGIN
+#    ifdef __cplusplus
+extern "C" {
+#    endif
 
 RZ_DEC rz_isize rz_nprocs(void);
 
@@ -34,9 +36,6 @@ RZ_DEC RZ_ProcWaitAsyncStatus rz_proc_wait_async(RZ_Proc proc, rz_int *exit_stat
 
 typedef RZ_Array(const rz_char *) RZ_ProcCommand;
 typedef RZ_Array(const rz_char *) RZ_ProcEnvs;
-
-RZ_DEC RZ_ProcEnvs rz_proc_get_default_envs(RZ_Allocator allocator);
-RZ_DEC void        rz_proc_envs_free(RZ_ProcEnvs *envs);
 
 RZ_DEC void rz_proc_display_command(RZ_ProcCommand cmd, RZ_StrBuilder *sb);
 #    define rz_proc_cmd_arg(cmd, arg)  rz_arr_append(cmd, arg)
@@ -62,9 +61,11 @@ RZ_DEC bool rz_proc_run_opt(RZ_ProcCommand *cmd, RZ_ProcRunOpt opt);
 #    define rz_proc_run(cmd, ...) rz_proc_run_opt(cmd, (RZ_ProcRunOpt){__VA_ARGS__})
 
 RZ_DEC RZ_Proc          rz_proc_id(void);
-RZ_DEC RZ_NORETURN void rz_proc_exit(rz_i32 code);
-RZ_DEC RZ_NORETURN void rz_proc_abort(void);
+RZ_NORETURN RZ_DEC void rz_proc_exit(rz_i32 code);
+RZ_NORETURN RZ_DEC void rz_proc_abort(void);
 
-RZ_EXTERN_C_END
+#    ifdef __cplusplus
+} /* extern "C" */
+#    endif
 
 #endif /* end of include guard: __RZ_PROCESS_H */

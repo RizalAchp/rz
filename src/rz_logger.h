@@ -56,7 +56,7 @@ RZ_DEC bool        rz_log_set_logger(RZ_Logger logger);
 RZ_DEC RZ_Logger   rz_log_logger(void);
 
 RZ_DEC bool rz_log_enable(RZ_Logger log, const char *tag, RZ_LogLevel level);
-RZ_DEC void rz_log(RZ_Logger log, RZ_LogRecord record, RZ_PRINTF_FMT(const char *msg), ...) RZ_PRINTF_FORMAT(2, 3);
+RZ_DEC void rz_log(RZ_Logger log, RZ_LogRecord record, RZ_PRINTF_FMT(const char *msg), ...) RZ_PRINTF_FORMAT(3, 4);
 RZ_DEC void rz_log_flush(RZ_Logger log);
 
 // default impementation logger. output to FILE*
@@ -109,6 +109,12 @@ RZ_DEC bool rz_log_init_default_opt(RZ_LogDefaultOpt opt);
 #    define RZ_LOGI(TAG, ...) RZ_LOG(RZ_LOG_LEVEL_INFO, TAG, __VA_ARGS__)
 #    define RZ_LOGD(TAG, ...) RZ_LOG(RZ_LOG_LEVEL_DEBUG, TAG, __VA_ARGS__)
 #    define RZ_LOGT(TAG, ...) RZ_LOG(RZ_LOG_LEVEL_TRACE, TAG, __VA_ARGS__)
+
+#    define RZ_LOGE_INTR(...) RZ_LOG(RZ_LOG_LEVEL_ERROR, RZ_TAG, __VA_ARGS__)
+#    define RZ_LOGW_INTR(...) RZ_LOG(RZ_LOG_LEVEL_WARN, RZ_TAG, __VA_ARGS__)
+#    define RZ_LOGI_INTR(...) RZ_LOG(RZ_LOG_LEVEL_INFO, RZ_TAG, __VA_ARGS__)
+#    define RZ_LOGD_INTR(...) RZ_LOG(RZ_LOG_LEVEL_DEBUG, RZ_TAG, __VA_ARGS__)
+#    define RZ_LOGT_INTR(...) RZ_LOG(RZ_LOG_LEVEL_TRACE, RZ_TAG, __VA_ARGS__)
 
 #    ifdef __cplusplus
 } /* extern "C" */

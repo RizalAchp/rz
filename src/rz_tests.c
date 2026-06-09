@@ -1,5 +1,6 @@
 #include "rz_tests.h"
 
+#include "rz_allocator.h"
 #include "rz_argparse.h"
 #include "rz_strings.h"
 #include "rz_time.h"
@@ -15,22 +16,21 @@ static inline int rz__tests_score_cmp(void const *a, void const *b);
 static bool       rz__tests_finish(RZ__TestsGlobalCtx *ctx);
 static bool       rz__tests_run(RZ__TestsGlobalCtx *ctx, RZ_StrView run_arg);
 static bool       rz__tests_lists(RZ__TestsGlobalCtx *ctx);
-static void       rz__tests_set_atty(RZ__TestsGlobalCtx *ctx);
 
 RZ_DEF bool rz_tests_run(RZ__TestsGlobalCtx *ctx, int argc, char *argv[]) {
     RZ_StrView run_arg  = rz__default_run;
     bool       list_arg = false;
 
-    RZ_Args args        = {.len = argc, .data = argv};
-    auto    prog        = rz_args_next(&args);
-    RZ_DBG_ASSERT(prog.is_some);
+    RZ_Args    args     = {.len = argc, .data = argv};
+    RZ_StrView prog     = {0};
+    RZ_DBG_ASSERT(rz_args_next(&args, &prog));
 
-    RZ_Argparse *ap = rz_ap(prog.unwrap.data, .description = "rz tests runner", .version = "1.0");
+    RZ_Argparse *ap = rz_ap(prog.data, .description = "rz tests runner", .version = "1.0");
     rz_ap_pos_sv(ap, "run", &run_arg, .pos = 0, .value_name = "TESTS_NAME", .required = false, .description = "name of tests that wanna to run");
     rz_ap_arg_flag(ap, "list", &list_arg, .long_flag = "list", .short_flag = "l", .required = false, .description = "lists all of the tests available inside the runner");
     if (!rz_ap_parse(ap, argc, argv)) return false;
 
-    rz__tests_set_atty(ctx);
+    ctx->atty = rz_isatty(ctx->output);
 
     if (list_arg) return rz__tests_lists(ctx);
     return rz__tests_run(ctx, run_arg);
@@ -127,7 +127,9 @@ static void rz__tests_case_failure(RZ__TestsGlobalCtx *gctx, RZ__TestCaseCtx *ct
             fprintf(gctx->output, "\t expected : %s" RZ_ENDLINE, f->expected);
             fprintf(gctx->output, "\t actual   : %s" RZ_ENDLINE, f->actual);
         }
-        if (f->msg) { fprintf(gctx->output, "\t message  : %s" RZ_ENDLINE, f->msg); }
+        if (f->msg) {
+            fprintf(gctx->output, "\t message  : %s" RZ_ENDLINE, f->msg);
+        }
     }
 }
 
@@ -204,7 +206,9 @@ static bool rz__tests_run(RZ__TestsGlobalCtx *ctx, RZ_StrView run_arg) {
     }
 
     if (!rz_sv_eq(run_arg, rz__default_run)) {
-        RZ_TEMP_ALLOCATOR_BLOCK(a, {
+        auto m = rz_temp_snapshot();
+        auto a = rz_temp_allocator();
+        {
             RZ_Array(struct RZ__Score) scores = {.allocator = a};
             rz_arr_reserve(&scores, ctx->cases.len);
 
@@ -229,8 +233,11 @@ static bool rz__tests_run(RZ__TestsGlobalCtx *ctx, RZ_StrView run_arg) {
             fprintf(stderr, "ERROR: Unknown tests case name: " RZ_SVFmt RZ_ENDLINE, RZ_SVArg(run_arg));
             fprintf(stderr, "help: do you mean this?" RZ_ENDLINE);
             rz_usize max_score = RZ_MAX(5, scores.len);
-            for (rz_usize i = 0; i < max_score; i++) { fprintf(stderr, "   - %s" RZ_ENDLINE, scores.data[i].name); }
-        });
+            for (rz_usize i = 0; i < max_score; i++) {
+                fprintf(stderr, "   - %s" RZ_ENDLINE, scores.data[i].name);
+            }
+        }
+        rz_temp_rewind(m);
         return false;
     }
 
@@ -247,21 +254,4 @@ static bool rz__tests_lists(RZ__TestsGlobalCtx *ctx) {
         printf("    - %s" RZ_ENDLINE, c->name);
     }
     return true;
-}
-
-static void rz__tests_set_atty(RZ__TestsGlobalCtx *ctx) {
-#ifdef RZ_OS_WINDOWS
-    ctx->atty = false;
-    DWORD  mode;
-    HANDLE h = (HANDLE)_get_osfhandle(_fileno(ctx->output));
-    if (h != INVALID_HANDLE_VALUE) {
-        if (GetConsoleMode(h, &mode)) {
-            SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-            ctx->atty = true;
-            // Now ANSI sequences like \x1b[31m will work
-        }
-    }
-#else
-    ctx->atty = isatty(fileno(ctx->output));
-#endif
 }

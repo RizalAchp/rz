@@ -51,7 +51,7 @@
 
 ///  Append several items to a dynamic array
 ///    void rz_arr_append_many(RZ_Array(T) *da, T *new_data, rz_usize new_data_len);
-#    define rz_arr_append_many(da, new_data, new_data_len)  do { RZ_STATIC_ASSERT_TYPE_COMPATIBLE(*(da)->data, *new_data); rz_usize len = (new_data_len); rz__arr_grow(da, (da)->len + len); rz_memcpy((da)->data + (da)->len, (new_data), len * sizeof(*(da)->data)); (da)->len += len; } while (0)
+#    define rz_arr_append_many(da, new_data, new_data_len)  do { RZ_STATIC_ASSERT_TYPE_COMPATIBLE(*(da)->data, *new_data); rz_usize len = (new_data_len); rz__arr_grow(da, (da)->len + len); memcpy((da)->data + (da)->len, (new_data), len * sizeof(*(da)->data)); (da)->len += len; } while (0)
 
 ///  Reserve size (reallocate data to the new capacity)
 ///    void rz_arr_reserve(RZ_Array(T) *da, rz_usize capacity);
@@ -72,7 +72,7 @@
 ///  unordered remove the item (from param index `ì`)
 ///  delete item that not preserve order of data
 ///      T* rz_arr_remove_unordered(RZ_Array(T) *da, rz_usize i);
-#    define rz_arr_remove_unordered(da, i)  (rz_memswap(&rz_arr_at(da, i), &rz_arr_last(da), sizeof(*(da)->data)), rz_arr_pop(da))
+#    define rz_arr_remove_unordered(da, i)  (memswap(&rz_arr_at(da, i), &rz_arr_last(da), sizeof(*(da)->data)), rz_arr_pop(da))
 
 ///  Macro that start with rz_arr is Generic macro that accept 
 ///     ArrayLike: DA_Array(T) and DA_ArrayView(T), that have `len` and `data`
@@ -121,7 +121,7 @@
 ///  swap array item for idx_a and idx_b. return true if success. false if failed.
 ///  failed when the idx_a or idx_b is invalid or the arrtor is empty
 ///  bool   rz_arr_swap(ArrayLike<T> *a, rz_usize idx_a, rz_usize idx_b);
-#    define rz_arr_swap(a, idx_a, idx_b)   rz_memswap(rz_arr_get(a, idx_a), rz_arr_get(a, idx_b), sizeof(*(a)->data));
+#    define rz_arr_swap(a, idx_a, idx_b)   memswap(rz_arr_get(a, idx_a), rz_arr_get(a, idx_b), sizeof(*(a)->data));
 
 ///  iterate item from array.
 ///  example usage:
@@ -169,13 +169,13 @@
 
 ///  check if array is ends with other array (`hasystack` has suffix of `needle`)
 ///  bool   rz_arr_ends_with(ArrayLike<T> *haystack, ArrayLike<T> *needle);
-#    define rz_arr_ends_with(a, needles)      ((needles).len <= (a)->len) && rz_memcmp((a)->data + ((a)->len - (needles)->len), (needles)->data, (needles)->len * sizeof(*(a)->data))
-#    define rz_arr_ends_with_item(a, needle)  (1 <= (a)->len)             && rz_memcmp((a)->data + ((a)->len - 1), RZ_ADDRESSOF(RZ_TYPEOF(needle), needle), sizeof(needle))
+#    define rz_arr_ends_with(a, needles)      ((needles).len <= (a)->len) && memcmp((a)->data + ((a)->len - (needles)->len), (needles)->data, (needles)->len * sizeof(*(a)->data))
+#    define rz_arr_ends_with_item(a, needle)  (1 <= (a)->len)             && memcmp((a)->data + ((a)->len - 1), RZ_ADDRESSOF(RZ_TYPEOF(needle), needle), sizeof(needle))
 
 ///  check if array is starts with other array (`hasystack` has prefix of `needle`)
 ///  bool   rz_arr_starts_with(ArrayLike<T> *haystack, ArrayLike<T> *needle);
-#    define rz_arr_starts_with(a, needles)     ((needles).len <= (a)->len) && rz_memcmp((a)->data, (needles)->data, (needles)->len * sizeof(*(a)->data))
-#    define rz_arr_starts_with_item(a, needle) (1 <= (a)->len)             && rz_memcmp((a)->data, RZ_ADDRESSOF(RZ_TYPEOF(needle), needle), sizeof(needle))
+#    define rz_arr_starts_with(a, needles)     ((needles).len <= (a)->len) && memcmp((a)->data, (needles)->data, (needles)->len * sizeof(*(a)->data))
+#    define rz_arr_starts_with_item(a, needle) (1 <= (a)->len)             && memcmp((a)->data, RZ_ADDRESSOF(RZ_TYPEOF(needle), needle), sizeof(needle))
 
 ///  split array into 2 result by n (mid). first_result and last_result. (inclusive)
 ///  the left   will contains [first .. mid]. excluding the mid. and
@@ -233,7 +233,7 @@
 ///////////////
 /// Hm (HashMap) & Hs (HashSet) Macors helpers
 ///
-#    if defined(RZ_BIT64)
+#    if RZ_TARGET_BITS_64 
 #        define RZ_SIPHASH_2_4
 #    endif
 #    ifdef RZ_SIPHASH_2_4
@@ -285,9 +285,8 @@
         /* .len - amount of unique items in the Hash Table. */  \
         rz_usize len;                                           \
         /* .data - amount of unique items in the Hash Table. */ \
-        T            *data;                                     \
-        rz_ptrdiff    __temp
-
+        T        *data;                                         \
+        rz_ptrdiff  __temp
 
 /// ---- Example usage (illustrative) ----
 /// 
@@ -309,7 +308,6 @@
 /// rz_hs_put(&myset, 7); // inserts integer 7
 /// rz_hs_free(&myset);
 /// 
-
 
 /// RZ_Hm(Key, Value)
 /// 
@@ -450,7 +448,7 @@
 ///  Value *v = rz_hm_get(&mymap, some_key);
 ///  *v = new_value;
 /// 
-#    define rz_hm_get(hm, _key)          (hm = rz__hm_call(get, hm, _key), &(hm)->data[(hm)->__temp].value);   RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm))
+#    define rz_hm_get(hm, _key)          ((void)rz__hm_call(get, hm, _key), &(hm)->data[(hm)->__temp].value);   RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm))
 #    define rz_hm_find_get(hm, _key)     ((void)rz__hm_call(find, hm, _key), ((hm)->__temp == -1) ? NULL : &(hm)->data[(hm)->__temp].value);   RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm))
 
 /// bool rz_hm_put(RZ_Hm(Key, Value) hm, Key _key, Value _value)
@@ -480,37 +478,36 @@
 #    define rz_hs_get                rz_hm_get
 #    define rz_hs_put(hm, _key)      { rz__hm_call(put, hm, _key); RZ__HM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*hm)); } while(0)
 
-
 #    define rz_hm_foreach rz_foreach
 
-///////////////
-/// Bm (BtreeMap) and Bs (BtreeSet) Macors helpers
-///
-#    define RZ_Bm(Key, Value) struct { struct { Key key; Value value; } **__temp_data; }
-#    define RZ_Bs(Key)        struct { Key **__temp_data; }
-
-#    define rz__bmkeyvalue(typekv, _key, _value)    ((RZ__BmKeyValue){.key = RZ_ADDRESSOF((typekv)->key, _key), .keysize sizeof(_key), .value = _value, .valuesize = sizeof(_value), .valueoffs = RZ_OFFSETOF(RZ_TYPEOF(typekv), value)})
-#    define rz__bmkey(typekv, _key)                 ((RZ__BmKeyValue){.key = RZ_ADDRESSOF((typekv)->key, _key), .keysize sizeof(key), .valueoffs = RZ_OFFSETOF(RZ_TYPEOF(typekv), value)})
-
-#    define RZ__BM_IS_OPAQUE_CONVARTIBLE(bm_type)  RZ_STATIC_ASSERT(((RZ_OFFSETOF(bm_type, len)      == RZ_OFFSETOF(RZ_BmOpaque, len)) && (RZ_OFFSETOF(bm_type, data)     == RZ_OFFSETOF(RZ_BmOpaque, data)))), #bm_type " not convertable to RZ_BmOpaque")
-
-#    define rz_bm_init(bm, ...)             rz__bm_init        ((RZ_BmOpaque *)bm, (RZ__BmInitOpt){ .elemsize = sizeof(*(bm)->data) __VA_OPT__(, ) __VA_ARGS__ }); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
-#    define rz_bm_free(bm)                  rz__bm_free        ((RZ_BmOpaque *)bm, sizeof(*(bm)->data)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
-#    define rz_bm_reset(bm)                 rz__bm_reset       ((RZ_BmOpaque *)bm, sizeof(*(bm)->data)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
-#    define rz_bm_put(bm, _key, _value)     (bm = rz__bm_put   ((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)), (bm)->data[(bm)->__temp] = _value;); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
-#    define rz_bm_find(bm, _key)            rz__bm_find        ((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
-#    define rz_bm_find_default(bm, _key)    rz__bm_find_default((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
-#    define rz_bm_get(bm, _key)             (bm = rz__bm_get   ((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)), &(bm)->data[(bm)->__temp].value); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
-#    define rz_bm_delete(bm, key)           rz__bm_delete((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
-
-#    define rz_bs_init                      rz_bm_init
-#    define rz_bs_free                      rz_bm_free
-#    define rz_bs_reset                     rz_bm_reset
-#    define rz_bs_put(bm, _key)             { rz__bm_put( (RZ_BmOpaque *)bm, sizeof(*(*((bm)->__temp_data))), rz__bmkeyvalue(*((bm)->__temp_data, _key, NULL)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm)) } while(0)
-#    define rz_bs_find                      rz_bm_find
-#    define rz_bs_find_default              rz_bm_find_default
-#    define rz_bs_get                       rz_bm_get
-#    define rz_bs_delete                    rz_bm_delete
+// ///////////////
+// /// Bm (BtreeMap) and Bs (BtreeSet) Macors helpers
+// ///
+// #    define RZ_Bm(Key, Value) struct { struct { Key key; Value value; } **__temp_data; }
+// #    define RZ_Bs(Key)        struct { Key **__temp_data; }
+//
+// #    define rz__bmkeyvalue(typekv, _key, _value)    ((RZ__BmKeyValue){.key = RZ_ADDRESSOF((typekv)->key, _key), .keysize sizeof(_key), .value = _value, .valuesize = sizeof(_value), .valueoffs = RZ_OFFSETOF(RZ_TYPEOF(typekv), value)})
+// #    define rz__bmkey(typekv, _key)                 ((RZ__BmKeyValue){.key = RZ_ADDRESSOF((typekv)->key, _key), .keysize sizeof(key), .valueoffs = RZ_OFFSETOF(RZ_TYPEOF(typekv), value)})
+//
+// #    define RZ__BM_IS_OPAQUE_CONVARTIBLE(bm_type)  RZ_STATIC_ASSERT(((RZ_OFFSETOF(bm_type, len)      == RZ_OFFSETOF(RZ_BmOpaque, len)) && (RZ_OFFSETOF(bm_type, data)     == RZ_OFFSETOF(RZ_BmOpaque, data)))), #bm_type " not convertable to RZ_BmOpaque")
+//
+// #    define rz_bm_init(bm, ...)             rz__bm_init        ((RZ_BmOpaque *)bm, (RZ__BmInitOpt){ .elemsize = sizeof(*(bm)->data) __VA_OPT__(, ) __VA_ARGS__ }); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
+// #    define rz_bm_free(bm)                  rz__bm_free        ((RZ_BmOpaque *)bm, sizeof(*(bm)->data)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
+// #    define rz_bm_reset(bm)                 rz__bm_reset       ((RZ_BmOpaque *)bm, sizeof(*(bm)->data)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
+// #    define rz_bm_put(bm, _key, _value)     (bm = rz__bm_put   ((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)), (bm)->data[(bm)->__temp] = _value;); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
+// #    define rz_bm_find(bm, _key)            rz__bm_find        ((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
+// #    define rz_bm_find_default(bm, _key)    rz__bm_find_default((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
+// #    define rz_bm_get(bm, _key)             (bm = rz__bm_get   ((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)), &(bm)->data[(bm)->__temp].value); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
+// #    define rz_bm_delete(bm, key)           rz__bm_delete((RZ_BmOpaque *)bm, sizeof(*(bm)->data), rz__bmkeyvalue((bm)->data, _key)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm))
+//
+// #    define rz_bs_init                      rz_bm_init
+// #    define rz_bs_free                      rz_bm_free
+// #    define rz_bs_reset                     rz_bm_reset
+// #    define rz_bs_put(bm, _key)             { rz__bm_put( (RZ_BmOpaque *)bm, sizeof(*(*((bm)->__temp_data))), rz__bmkeyvalue(*((bm)->__temp_data, _key, NULL)); RZ__BM_IS_OPAQUE_CONVARTIBLE(RZ_TYPEOF(*bm)) } while(0)
+// #    define rz_bs_find                      rz_bm_find
+// #    define rz_bs_find_default              rz_bm_find_default
+// #    define rz_bs_get                       rz_bm_get
+// #    define rz_bs_delete                    rz_bm_delete
 
 // clang-format on
 
@@ -525,6 +522,9 @@ typedef RZ_Array(void) RZ_ArrayOpaque;
 typedef RZ_ArrayView(void) RZ_ArrayViewOpaque;
 typedef bool (*RZ__ArrFindPatternFn)(const void *item, const void *data);
 
+typedef RZ_Array(rz_u8) RZ_BytesArray;
+typedef RZ_ArrayView(rz_u8) RZ_BytesArrayView;
+
 RZ_DEC void  rz__arr_grow_impl(void **data, rz_usize *capacity, rz_usize elemsize, rz_usize new_capacity, RZ_Allocator allocator);
 RZ_DEC void *rz__arr_remove(void *data, rz_usize *len, rz_usize type_size, rz_usize idx);
 
@@ -536,11 +536,6 @@ RZ_DEC rz_usize rz__arr_find_by(const RZ_ArrayViewOpaque *arr, RZ__ArrFindPatter
 RZ_DEC rz_usize rz__arr_rfind_by(const RZ_ArrayViewOpaque *arr, RZ__ArrFindPatternFn pat, void const *pat_data, rz_usize elemsize);
 
 RZ_DEC rz_usize rz__arr_bsearch(const RZ_ArrayViewOpaque *data, rz_usize elemsize, void const *needle, int (*cmpfunc)(void const *, void const *));
-
-RZ_DEC bool rz__arr_split(RZ_ArrayViewOpaque *arr, rz_usize elemsize, void const *needle, RZ_ArrayViewOpaque *res, bool inclusive);
-RZ_DEC bool rz__arr_rsplit(RZ_ArrayViewOpaque *arr, rz_usize elemsize, void const *needle, RZ_ArrayViewOpaque *res, bool inclusive);
-RZ_DEC bool rz__arr_split_by(RZ_ArrayViewOpaque *arr, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, RZ_ArrayViewOpaque *res, bool inclusive);
-RZ_DEC bool rz__arr_rsplit_by(RZ_ArrayViewOpaque *arr, rz_usize elemsize, bool (*pat)(const void *, const void *), void *pat_data, RZ_ArrayViewOpaque *res, bool inclusive);
 
 ///////////////
 /// Hm (HashMap) & Hs (HashSet) Imlementation details
@@ -597,34 +592,35 @@ RZ_DEC rz_usize rz_hm_knuth_hash(void const *data, rz_usize size, rz_usize seed)
 RZ_DEC rz_usize rz_hm_id_hash(void const *data, rz_usize size, rz_usize seed);
 
 ///////////////
+/// TODO: implement this
 /// Bm (BtreeMap) & Bs (BtreeSet) Imlementation details
 ///
-typedef RZ_Bs(void) RZ_BmOpaque;
-typedef rz_ptrdiff (*RZ_BmCmpFn)(void const *a, void const *b, rz_usize len);
-
-typedef struct {
-    rz_usize     elemsize;
-    rz_usize     initial_capacity;
-    RZ_BmCmpFn   cmp;
-    RZ_Allocator allocator;
-} RZ__BmInitOpt;
-
-typedef struct {
-    void    *key;
-    void    *value;
-    rz_usize keysize;
-    rz_usize valuesize;
-    rz_usize valueoffs;
-} RZ__BmKeyValue;
-
-RZ_DEC void rz__bm_init(RZ_BmOpaque *opq, RZ__BmInitOpt opt);
-RZ_DEC void rz__bm_free(RZ_BmOpaque *opq, rz_usize elemsize);
-RZ_DEC void rz__bm_reset(RZ_BmOpaque *opq, rz_usize elemsize);
-
-RZ_DEC void      *rz__bm_put(RZ_BmOpaque *opq, rz_usize elemsize, RZ__BmKeyValue kv);
-RZ_DEC rz_ptrdiff rz__bm_find(RZ_BmOpaque *opq, rz_usize elemsize, RZ__BmKeyValue kv);
-RZ_DEC rz_ptrdiff rz__bm_find_default(RZ_BmOpaque *opq, rz_usize elemsize, RZ__BmKeyValue kv);
-RZ_DEC bool       rz__bm_delete(RZ_BmOpaque *opq, rz_usize elemsize, RZ__BmKeyValue kv);
+// typedef RZ_Bs(void) RZ_BmOpaque;
+// typedef rz_ptrdiff (*RZ_BmCmpFn)(void const *a, void const *b, rz_usize len);
+//
+// typedef struct {
+//     rz_usize     elemsize;
+//     rz_usize     initial_capacity;
+//     RZ_BmCmpFn   cmp;
+//     RZ_Allocator allocator;
+// } RZ__BmInitOpt;
+//
+// typedef struct {
+//     void    *key;
+//     void    *value;
+//     rz_usize keysize;
+//     rz_usize valuesize;
+//     rz_usize valueoffs;
+// } RZ__BmKeyValue;
+//
+// RZ_DEC void rz__bm_init(RZ_BmOpaque *opq, RZ__BmInitOpt opt);
+// RZ_DEC void rz__bm_free(RZ_BmOpaque *opq, rz_usize elemsize);
+// RZ_DEC void rz__bm_reset(RZ_BmOpaque *opq, rz_usize elemsize);
+//
+// RZ_DEC void      *rz__bm_put(RZ_BmOpaque *opq, rz_usize elemsize, RZ__BmKeyValue kv);
+// RZ_DEC rz_ptrdiff rz__bm_find(RZ_BmOpaque *opq, rz_usize elemsize, RZ__BmKeyValue kv);
+// RZ_DEC rz_ptrdiff rz__bm_find_default(RZ_BmOpaque *opq, rz_usize elemsize, RZ__BmKeyValue kv);
+// RZ_DEC bool       rz__bm_delete(RZ_BmOpaque *opq, rz_usize elemsize, RZ__BmKeyValue kv);
 
 #    ifdef __cplusplus
 }

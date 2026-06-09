@@ -1,7 +1,6 @@
 #pragma once
 #ifndef RZ_ARGPARSE_H
 #    define RZ_ARGPARSE_H
-
 #    include "rz_common.h"
 #    include "rz_strings.h"
 

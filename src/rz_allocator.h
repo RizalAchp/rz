@@ -11,17 +11,16 @@ extern "C" {
 #    ifndef RZ_REALLOC
 #        define RZ_REALLOC realloc
 #    endif
-
 #    ifndef RZ_FREE
 #        define RZ_FREE free
 #    endif
 
 #    ifndef RZ_MALLOC_SIZE
-#        if defined(RZ_OS_WINDOWS)
+#        if RZ_TARGET_OS_WINDOWS
 #            define RZ_MALLOC_SIZE _msize
-#        elif defined(RZ_OS_APPLE)
+#        elif RZ_TARGET_FAMILY_APPLE
 #            define RZ_MALLOC_SIZE malloc_size
-#        elif defined(RZ_OS_UNIX)
+#        elif RZ_TARGET_FAMILY_UNIX
 #            define RZ_MALLOC_SIZE malloc_usable_size
 #        else
 #        endif
@@ -114,36 +113,11 @@ RZ_DEC void         rz_temp_rewind(RZ_ArenaMark m);
 #    define rz_tstrdup(cstr)         rz_strdup(rz_temp_allocator(), cstr)
 #    define rz_tmemcat(l, ln, r, rn) rz_memcat(rz_temp_allocator(), l, ln, r, rn)
 
-#    define RZ_TEMP_ALLOCATOR_BLOCK(allocator, ...)                     \
-        do {                                                            \
-            RZ_ArenaMark __temp_allocator_mark__ = rz_temp_snapshot();  \
-            RZ_Allocator allocator               = rz_temp_allocator(); \
-            do {                                                        \
-                __VA_ARGS__                                             \
-            } while (0);                                                \
-            rz_temp_rewind(__temp_allocator_mark__);                    \
-        } while (0)
-
-// RZ_DEC void       *rz_memcpy(void *restrict dest, const void *restrict src, rz_usize src_n);
-// RZ_DEC void       *rz_memmove(void *dest, const void *src, size_t src_n);
-// RZ_DEC const void *rz_memchr(const void *src, rz_int c, size_t n);
-// RZ_DEC rz_ptrdiff  rz_memcmp(const void *lhs, const void *rhs, rz_usize size);
-// RZ_DEC void       *rz_memset(void *dest, rz_i32 c, rz_usize n);
-
-#    define rz_memcpy  memcpy
-#    define rz_memmove memmove
-#    define rz_memchr  memchr
-#    define rz_memcmp  memcmp
-#    define rz_memset  memset
-
 RZ_DEC bool rz_memequal(const void *lhs, rz_usize lhs_size, const void *rhs, rz_usize rhs_size);
 RZ_DEC bool rz_memswap(void *lhs, void *rhs, rz_usize n);
-#    define rz_memzero(dest, n) rz_memset(dest, 0, n)
-
-// RZ_DEC
+#    define rz_memzero(dest, n) memset(dest, 0, n)
 
 #    if defined(__cplusplus)
 }
 #    endif /* ifdef  defined(__cplus_plus) */
-
 #endif     /* end of include guard: RZ_ALLOCATOR_H */

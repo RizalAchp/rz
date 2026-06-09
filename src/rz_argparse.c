@@ -1,6 +1,8 @@
 #include "rz_argparse.h"
 
+#include "rz_allocator.h"
 #include "rz_common.h"
+#include "rz_error.h"
 #include "rz_sprintf.h"
 
 typedef RZ_Array(RZ_Argparse *) RZ_ArgparseSubcmds;
@@ -112,11 +114,13 @@ RZ_DEC bool rz_ap_parse(RZ_Argparse *ap, int argc, char *argv[]) {
         rz_ap_arg_flag(ap, "version", &version_flag, .short_flag = "V", .long_flag = "version", .description = "show version given of the program.");
     }
 
-    bool result = false;
-    RZ_TEMP_ALLOCATOR_BLOCK(a, {
-        RZ_Str error_buf = {.allocator = a};
+    bool result = true;
+    {
+        auto   m         = rz_temp_snapshot();
+        RZ_Str error_buf = {.allocator = rz_temp_allocator()};
         result           = rz__ap_parse(ap, &args, &error_buf);
-    });
+        rz_temp_rewind(m);
+    }
 
     if (result && version_flag) {
         fprintf(stdout, RZ_SVFmt " version-" RZ_SVFmt, RZ_SVArg(ap->name), RZ_SVArg(ap->version));
@@ -140,11 +144,13 @@ RZ_DEC void rz_ap_display_help(RZ_Argparse *ap, RZ_Str *buf) {
 }
 
 RZ_DEC void rz_ap_print_help(RZ_Argparse *ap) {
-    RZ_TEMP_ALLOCATOR_BLOCK(a, {
-        RZ_Str buf = {.allocator = a};
-        rz_ap_display_help(ap, &buf);
-        fprintf(stderr, "%.*s", (int)buf.len, buf.data);
-    });
+    auto m     = rz_temp_snapshot();
+
+    RZ_Str buf = {.allocator = rz_temp_allocator()};
+    rz_ap_display_help(ap, &buf);
+    fprintf(stderr, "%.*s", (int)buf.len, buf.data);
+
+    rz_temp_rewind(m);
 }
 
 RZ_DEC void rz_ap_display_type_cstr(const void *v, RZ_Str *buf) {
@@ -175,7 +181,9 @@ RZ_DEC void rz_ap_display_type_multi(const void *v, RZ_Str *buf) {
     const RZ_StrViews *value = (const RZ_StrViews *)v;
     rz_str_append_cstr(buf, "[");
     rz_foreach_idx(i, it, (RZ_StrViews *)value, {
-        if (i != 0) { rz_str_append_cstr(buf, ", "); }
+        if (i != 0) {
+            rz_str_append_cstr(buf, ", ");
+        }
         rz_str_appendf(buf, RZ_SVFmt, RZ_SVArg(*it));
     });
     rz_str_append_cstr(buf, "]");
@@ -206,17 +214,19 @@ RZ_DEF bool rz_ap_parse_type_bool(void *value_dest, RZ_StrView value, RZ_Str *er
     return true;
 }
 
-#define rz__ap_helper_parse_primitive(type, ...)                                      \
-    do {                                                                              \
-        char *end;                                                                    \
-        type  v = __VA_ARGS__;                                                        \
-        if (end == value.data) { rz_str_append_cstr(error_buf, "malformed number"); } \
-        if (rz_errno != 0) {                                                          \
-            rz_str_appendf(error_buf, "parse number failed: %s", rz_strerror());      \
-            return false;                                                             \
-        }                                                                             \
-        *(type *)value_dest = v;                                                      \
-        return true;                                                                  \
+#define rz__ap_helper_parse_primitive(type, ...)                                 \
+    do {                                                                         \
+        char *end;                                                               \
+        type  v = __VA_ARGS__;                                                   \
+        if (end == value.data) {                                                 \
+            rz_str_append_cstr(error_buf, "malformed number");                   \
+        }                                                                        \
+        if (rz_last_os_error() != 0) {                                           \
+            rz_str_appendf(error_buf, "parse number failed: %s", rz_strerror()); \
+            return false;                                                        \
+        }                                                                        \
+        *(type *)value_dest = v;                                                 \
+        return true;                                                             \
     } while (0)
 
 RZ_DEC bool rz_ap_parse_type_int(void *value_dest, RZ_StrView value, RZ_Str *error_buf) {
@@ -370,9 +380,15 @@ static void rz__ap_display_help_usages(RZ_Argparse *ap, RZ_Str *buf) {
     rz_foreach(it, &ap->display_usage) {
         rz_str_appendf(buf, RZ_SVFmt " ", RZ_SVArg(*it));
     }
-    if (!rz_arr_is_empty(&ap->pos_arguments)) { rz_str_append_cstr(buf, "<POSITIONAL_ARGUMENTS> "); }
-    if (!rz_arr_is_empty(&ap->arguments)) { rz_str_append_cstr(buf, "<ARGUMENTS> "); }
-    if (!rz_arr_is_empty(&ap->subcommands)) { rz_str_append_cstr(buf, "<COMMANDS> "); }
+    if (!rz_arr_is_empty(&ap->pos_arguments)) {
+        rz_str_append_cstr(buf, "<POSITIONAL_ARGUMENTS> ");
+    }
+    if (!rz_arr_is_empty(&ap->arguments)) {
+        rz_str_append_cstr(buf, "<ARGUMENTS> ");
+    }
+    if (!rz_arr_is_empty(&ap->subcommands)) {
+        rz_str_append_cstr(buf, "<COMMANDS> ");
+    }
 }
 
 static void rz__ap_display_help_pos(RZ_Argparse *ap, RZ_ArgparsePos *arg, RZ_Str *buf) {
@@ -388,7 +404,9 @@ static void rz__ap_display_help_pos(RZ_Argparse *ap, RZ_ArgparsePos *arg, RZ_Str
         item = arg->name;
     }
     rz_str_appendf(buf, "<%s%s>" RZ_ENDLINE, item, (arg->type == RZ_AP_MULTI_SV) ? "..." : "");
-    if (arg->description) { rz_str_appendf(buf, "    %s" RZ_ENDLINE, arg->description); }
+    if (arg->description) {
+        rz_str_appendf(buf, "    %s" RZ_ENDLINE, arg->description);
+    }
 }
 
 static void rz__ap_display_help_arg(RZ_Argparse *ap, RZ_ArgparseArg *arg, RZ_Str *buf) {
@@ -417,17 +435,20 @@ static void rz__ap_display_help_argparse(RZ_Argparse *ap, RZ_Str *buf) {
 
         rz_str_append_cstr(buf, "POSITIONAL_ARGUMENTS:" RZ_ENDLINE);
         rz_foreach(it, &ap->pos_arguments) {
-            RZ_TEMP_ALLOCATOR_BLOCK(ta, {
+            {
+                auto        m = rz_temp_snapshot();
                 const char *item;
                 if (it->value_name) {
                     item = it->value_name;
                 } else {
                     item = it->name;
                 }
-                const char *left  = rz_asprintf(ta, "<%s%s>", item, (it->type == RZ_AP_MULTI_SV) ? "..." : "");
+                const char *left  = rz_tsprintf("<%s%s>", item, (it->type == RZ_AP_MULTI_SV) ? "..." : "");
                 const char *right = (it->description == NULL) ? "" : it->description;
                 rz_str_appendf(buf, "    %-*s%s", max_width, left, right);
-            });
+
+                rz_temp_rewind(m);
+            }
             if (it->required) {
                 rz_str_append_cstr(buf, " [required]");
             } else {
@@ -435,7 +456,9 @@ static void rz__ap_display_help_argparse(RZ_Argparse *ap, RZ_Str *buf) {
                 it->value_display(it->value, buf);
                 rz_str_append(buf, ']');
             }
-            if (it->alias) { rz_str_appendf(buf, " [alias: %s]", it->alias); }
+            if (it->alias) {
+                rz_str_appendf(buf, " [alias: %s]", it->alias);
+            }
             rz_str_appendf(buf, " [pos: %zu]", it->pos);
             rz_str_append_cstr(buf, RZ_ENDLINE);
         }
@@ -447,15 +470,23 @@ static void rz__ap_display_help_argparse(RZ_Argparse *ap, RZ_Str *buf) {
         rz_str_append_cstr(buf, "COMMANDS:" RZ_ENDLINE);
         rz_foreach_idx(i, it, &ap->subcommands, {
             auto sub = *it;
-            RZ_TEMP_ALLOCATOR_BLOCK(ta, {
-                char *left  = rz_asprintf(ta, RZ_SVFmt, RZ_SVArg(sub->name));
-                char *right = rz_arr_is_empty(&sub->description) ? "" : rz_asprintf(ta, RZ_SVFmt, RZ_SVArg(sub->name));
+            {
+                auto  m     = rz_temp_snapshot();
+                char *left  = rz_tsprintf(RZ_SVFmt, RZ_SVArg(sub->name));
+                char *right = rz_arr_is_empty(&sub->description) ? "" : rz_tsprintf(RZ_SVFmt, RZ_SVArg(sub->name));
                 rz_str_appendf(buf, "    %-*s%s", max_width, left, right);
-            });
+                rz_temp_rewind(m);
+            }
 
-            if (sub->subcmd_id.is_some) { rz_str_appendf(buf, "[id: %zu]", sub->subcmd_id.unwrap); }
-            if (!rz_arr_is_empty(&sub->alias)) { rz_str_appendf(buf, " [alias: " RZ_SVFmt "]", RZ_SVArg(sub->alias)); }
-            if (ap->subcmd_selected.is_some && ap->subcmd_selected.unwrap == (*it)->subcmd_id.unwrap) { rz_str_append_cstr(buf, " [default]"); }
+            if (sub->subcmd_id.is_some) {
+                rz_str_appendf(buf, "[id: %zu]", sub->subcmd_id.unwrap);
+            }
+            if (!rz_arr_is_empty(&sub->alias)) {
+                rz_str_appendf(buf, " [alias: " RZ_SVFmt "]", RZ_SVArg(sub->alias));
+            }
+            if (ap->subcmd_selected.is_some && ap->subcmd_selected.unwrap == (*it)->subcmd_id.unwrap) {
+                rz_str_append_cstr(buf, " [default]");
+            }
             rz_str_append_cstr(buf, RZ_ENDLINE);
         });
     }
@@ -465,20 +496,23 @@ static void rz__ap_display_help_argparse(RZ_Argparse *ap, RZ_Str *buf) {
 
         rz_str_append_cstr(buf, "ARGUMENTS:" RZ_ENDLINE);
         rz_foreach(it, &ap->arguments) {
-            RZ_TEMP_ALLOCATOR_BLOCK(ta, {
+            {
+                auto  m    = rz_temp_snapshot();
+                auto  ta   = rz_temp_allocator();
                 char *left = "";
                 if (it->short_flag && it->value_name) {
                     left = rz_asprintf(ta, "-%s, --%s <%s%s>", it->short_flag, it->long_flag, it->value_name, (it->type == RZ_AP_MULTI_SV) ? "..." : "");
                 } else if (it->short_flag) {
-                    left = rz_asprintf(ta, "    --%s <%s%s>", it->short_flag, it->long_flag, it->value_name, (it->type == RZ_AP_MULTI_SV) ? "..." : "");
-                } else if (it->value_name) {
                     left = rz_asprintf(ta, "-%s, --%s", it->short_flag, it->long_flag);
+                } else if (it->value_name) {
+                    left = rz_asprintf(ta, "    --%s <%s%s>", it->long_flag, it->value_name, (it->type == RZ_AP_MULTI_SV) ? "..." : "");
                 } else {
                     left = rz_asprintf(ta, "    --%s", it->long_flag);
                 }
                 const char *right = (it->description == NULL) ? "" : it->description;
-                rz_str_appendf(buf, "    %-*s%s", left, right);
-            });
+                rz_str_appendf(buf, "    %-*s%s", max_width, left, right);
+                rz_temp_rewind(m);
+            }
 
             if (it->required) {
                 rz_str_append_cstr(buf, " [required]");
@@ -487,7 +521,9 @@ static void rz__ap_display_help_argparse(RZ_Argparse *ap, RZ_Str *buf) {
                 it->value_display(it->value, buf);
                 rz_str_append(buf, ']');
             }
-            if (it->alias) { rz_str_appendf(buf, " [alias: %s]", it->alias); }
+            if (it->alias) {
+                rz_str_appendf(buf, " [alias: %s]", it->alias);
+            }
             rz_str_append_cstr(buf, RZ_ENDLINE);
         }
     }

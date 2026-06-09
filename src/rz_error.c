@@ -12,7 +12,7 @@ RZ_DEF const char *rz_strerror(void) {
     return rz_str_to_cstr(&rz__error_static);
 }
 
-RZ_DEF void rz_set_error(RZ_OsError errnum, const char *tag, const char *file, rz_int line, RZ_PRINTF_FMT(const char *fmt), ...) RZ_PRINTF_FORMAT(2, 3) {
+RZ_DEF void rz_set_error(RZ_OsError errnum, const char *tag, const char *file, rz_int line, const char *fmt, ...) {
     if (!rz_is_allocator(rz__error_static.allocator)) {
         rz__error_static.allocator = rz_std_allocator();
         rz_arr_reserve(&rz__error_static, RZ_MAX_BUFFER_STRERROR_LEN);
@@ -39,7 +39,7 @@ RZ_DEF void rz_set_error(RZ_OsError errnum, const char *tag, const char *file, r
 }
 
 static void rz__strerror_impl(RZ_OsError errnum, RZ_StrBuilder *sb) {
-#if defined(RZ_OS_WINDOWS)
+#if RZ_TARGET_OS_WINDOWS
     char    buf[RZ_MAX_BUFFER_STRERROR_LEN] = {0};
     HMODULE module                          = NULL;
     DWORD   flags                           = 0;
@@ -61,7 +61,7 @@ static void rz__strerror_impl(RZ_OsError errnum, RZ_StrBuilder *sb) {
     }
     rz_str_append_sized_str(sb, buf, size);
 #else
-    const char *err_cstr = strerror(err);
+    const char *err_cstr = strerror(errnum);
     rz_str_append_cstr(sb, err_cstr);
 #endif
 }

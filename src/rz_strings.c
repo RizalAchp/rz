@@ -39,62 +39,6 @@ RZ_DEF rz_char rz_ascii_upper(rz_char ch) {
     return ch ^ ((rz_char)rz_is_ascii_lower(ch) * ASCII_CASE_MASK);
 }
 
-RZ_DEF bool rz_strncmp(const rz_char *lhs, const rz_char *rhs, rz_usize n) {
-    const rz_u8 *l = (void *)lhs, *r = (void *)rhs;
-    if (!n--) return 0;
-    for (; *l && *r && n && *l == *r; l++, r++, n--);
-    return *l - *r;
-}
-
-RZ_DEF bool rz_strcmp(const rz_char *l, const rz_char *r) {
-    for (; *l == *r && *l; l++, r++);
-    return *(rz_u8 *)l - *(rz_u8 *)r;
-}
-
-RZ_DEF bool rz_strncasecmp(const rz_char *lhs, const rz_char *rhs, rz_usize n) {
-    const rz_u8 *l = (const rz_u8 *)lhs, *r = (const rz_u8 *)rhs;
-    if (!n--) return 0;
-    for (; *l && *r && n && (*l == *r || rz_ascii_lower(*l) == rz_ascii_lower(*r)); l++, r++, n--);
-    return rz_ascii_lower(*l) - rz_ascii_lower(*r);
-}
-
-RZ_DEF bool rz_strcasecmp(const rz_char *lhs, const rz_char *rhs) {
-    const rz_u8 *l = (const rz_u8 *)lhs, *r = (const rz_u8 *)rhs;
-    for (; *l && *r && (*l == *r || rz_ascii_lower(*l) == rz_ascii_lower(*r)); l++, r++);
-    return rz_ascii_lower(*l) - rz_ascii_lower(*r);
-}
-
-RZ_DEF rz_usize rz_strlen(const char *s) {
-    const char *a = s;
-
-#ifdef __GNUC__
-#    define ALIGN      (sizeof(size_t))
-#    define ONES       ((size_t)-1 / UCHAR_MAX)
-#    define HIGHS      (ONES * (UCHAR_MAX / 2 + 1))
-#    define HASZERO(x) ((x) - ONES & ~(x) & HIGHS)
-
-    typedef size_t __attribute__((__may_alias__)) word;
-    const word                                   *w;
-    for (; (uintptr_t)s % ALIGN; s++)
-        if (!*s) return s - a;
-    for (w = (const void *)s; !HASZERO(*w); w++);
-    s = (const void *)w;
-
-#    undef ALIGN
-#    undef ONES
-#    undef HIGHS
-#    undef HASZERO
-#endif
-
-    for (; *s; s++);
-    return s - a;
-}
-
-RZ_DEF rz_usize rz_strnlen(const char *s, rz_usize max_len) {
-    const char *p = rz_memchr(s, 0, max_len);
-    return p ? p - s : max_len;
-}
-
 #ifdef RZ_STRING_IMPL
 
 RZ_DEF RZ_Str rz_str_sized_alloc(const rz_char *cstr, rz_usize size, RZ_Allocator a) {
@@ -145,7 +89,7 @@ RZ_DEF rz_ptrdiff rz_sv_case_cmp(RZ_StrView lhs, RZ_StrView rhs) {
     else if (rhs_empty) return 1;
     else {
         if (lhs.len != rhs.len) return lhs.len - rhs.len;
-        return rz_strncasecmp(lhs.data, rhs.data, lhs.len);
+        return strncasecmp(lhs.data, rhs.data, lhs.len);
     }
 }
 
@@ -159,7 +103,7 @@ RZ_DEF rz_ptrdiff rz_sv_cmp(RZ_StrView lhs, RZ_StrView rhs) {
     else if (rhs_empty) return 1;
     else {
         if (lhs.len != rhs.len) return lhs.len - rhs.len;
-        return rz_memcmp(lhs.data, rhs.data, lhs.len);
+        return memcmp(lhs.data, rhs.data, lhs.len);
     }
 }
 

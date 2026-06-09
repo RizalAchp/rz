@@ -1,7 +1,7 @@
 #include "rz_process.h"
 
 RZ_DEF rz_isize rz_nprocs(void) {
-#ifdef RZ_OS_WINDOWS
+#if RZ_TARGET_OS_WINDOWS
     SYSTEM_INFO siSysInfo;
     GetSystemInfo(&siSysInfo);
     return siSysInfo.dwNumberOfProcessors;
@@ -13,7 +13,7 @@ RZ_DEF rz_isize rz_nprocs(void) {
 RZ_DEF bool rz_proc_wait(RZ_Proc proc, rz_int *exit_status) {
     if (proc == RZ_PROC_INVALID) return false;
 
-#ifdef RZ_OS_WINDOWS
+#if RZ_TARGET_OS_WINDOWS
     DWORD result = WaitForSingleObject(proc, INFINITE);
 
     if (result == WAIT_FAILED) {
@@ -67,7 +67,7 @@ RZ_DEF bool rz_procs_wait(RZ_Procs *procs) {
     rz_int return_status = 0;
     bool   result        = true;
     rz_foreach(proc, procs) {
-        result &= rz_proc_wait(proc, &return_status);
+        result &= rz_proc_wait(*proc, &return_status);
     }
     return result;
 }
@@ -81,7 +81,7 @@ RZ_DEF bool rz_procs_flush(RZ_Procs *procs) {
 RZ_DEF RZ_ProcWaitAsyncStatus rz_proc_wait_async(RZ_Proc proc, rz_int *exit_status, rz_int timeout_ms) {
     if (proc == RZ_PROC_INVALID) return false;
 
-#ifdef RZ_OS_WINDOWS
+#if RZ_TARGET_OS_WINDOWS
     DWORD result = WaitForSingleObject(proc, timeout_ms);
 
     if (result == WAIT_TIMEOUT) {
@@ -146,49 +146,6 @@ RZ_DEF RZ_ProcWaitAsyncStatus rz_proc_wait_async(RZ_Proc proc, rz_int *exit_stat
     nanosleep(&duration, NULL);
     return RZ_PROC_WAIT_TIMEOUT;
 #endif
-}
-
-RZ_DEF RZ_ProcEnvs rz_proc_get_default_envs(RZ_Allocator allocator) {
-    RZ_ProcEnvs envs = {.allocator = allocator};
-#ifdef RZ_OS_WINDOWS
-    LPCH envblock = GetEnvironmentStringsA();
-    auto p        = envblock;
-    while (*p) {
-        rz_usize len = strlen(p);
-        // skip entries that start with '=' (hidden/special)
-        if (*p != '=') {
-            rz_arr_append(&envs, p);
-        }
-        p += len + 1;
-    }
-
-#else
-    const char **envs = NULL;
-#    if defined(RZ_OS_UNIX)
-#        if defined(RZ_OS_FREEBSD)
-    envblock = (const char **)dlsym(RTLD_DEFAULT, "environ");
-#        elif defined(RZ_OS_APPLE)
-    envblock = (const char **)_NSGetEnviron();
-#        else
-    envblock = environ;
-#        endif
-    while (*envblock) {
-        rz_arr_append(&envs, *envblock);
-        envblock++;
-    }
-#    endif
-#    error "unknown os"
-#endif
-
-    return envs;
-}
-
-RZ_DEF void rz_proc_envs_free(RZ_ProcEnvs *envs) {
-    if (rz_arr_is_empty(envs)) return;
-#ifdef RZ_OS_WINDOWS
-    FreeEnvironmentStringsA((LPCH)*envs->data);
-#endif
-    rz_arr_free(envs);
 }
 
 RZ_DEC void rz_proc_display_command(RZ_ProcCommand cmd, RZ_StrBuilder *sb) {

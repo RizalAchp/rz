@@ -1,69 +1,58 @@
 #include "rz_allocator.h"
 
-#if defined(RZ_OS_APPLE)
-#    if RZ_ARCH_TAG == RZ_ARCH_X86_64
+#if RZ_TARGET_OS_WINDOWS
+#    if RZ_TARGET_ARCH_X86_64
 #        define RZ_PAGE_SIZE_MIN 4 << 10
 #        define RZ_PAGE_SIZE_MAX 4 << 10
-#    elif RZ_ARCH_TAG == RZ_ARCH_AARCH64
+#    elif RZ_TARGET_ARCH_AARCH64
 #        define RZ_PAGE_SIZE_MIN 16 << 10
 #        define RZ_PAGE_SIZE_MAX 16 << 10
-#    else
-#        define RZ_PAGE_SIZE_MIN 1
-#        define RZ_PAGE_SIZE_MAX 1
 #    endif
-#elif defined(RZ_OS_WINDOWS)
+#elif RZ_TARGET_OS_WINDOWS
 #    define RZ_PAGE_SIZE_MIN 4 << 10
 #    define RZ_PAGE_SIZE_MAX 4 << 10
-#elif defined(RZ_OS_FREEBSD)
+#elif RZ_TARGET_OS_FREEBSD
 #    define RZ_PAGE_SIZE_MIN 4 << 10
 #    define RZ_PAGE_SIZE_MAX 4 << 10
-#elif defined(RZ_OS_NETBSD)
+#elif RZ_TARGET_OS_NETBSD
 #    define RZ_PAGE_SIZE_MIN 4 << 10
-#    if RZ_ARCH_TAG == RZ_ARCH_X86_64 || RZ_ARCH_TAG == RZ_ARCH_X86 || RZ_ARCH_TAG == RZ_ARCH_ARM || RZ_ARCH_TAG == RZ_ARCH_RISCV32 || RZ_ARCH_TAG == RZ_ARCH_RISCV64
+#    if RZ_TARGET_ANY(ARCH, X86_64, X86, ARM, RISCV32, RISCV64)
 #        define RZ_PAGE_SIZE_MAX 4 << 10
-#    elif RZ_ARCH_TAG == RZ_ARCH_AARCH64
+#    elif RZ_TARGET_ARCH_AARCH64
 #        define RZ_PAGE_SIZE_MAX 64 << 10
-#    elif RZ_ARCH_TAG == RZ_ARCH_MIPS || RZ_ARCH_TAG == RZ_ARCH_MIPS64 || RZ_ARCH_TAG == RZ_ARCH_POWERPC || RZ_ARCH_TAG == RZ_ARCH_POWERPC64
+#    elif RZ_TARGET_ANY(ARCH, MIPS, MIPS64, POWERPC, POWERPC64)
 #        define RZ_PAGE_SIZE_MAX 16 << 10
-#    else
-#        define RZ_PAGE_SIZE_MIN 1
-#        define RZ_PAGE_SIZE_MAX 1
 #    endif
-#elif defined(RZ_OS_OPENBSD)
+#elif RZ_TARGET_OS_OPENBSD
 #    define RZ_PAGE_SIZE_MIN 4 << 10
-#    if RZ_ARCH_TAG == RZ_ARCH_X86_64 || RZ_ARCH_TAG == RZ_ARCH_X86 || RZ_ARCH_TAG == RZ_ARCH_ARM || RZ_ARCH_TAG == RZ_ARCH_RISCV32 || RZ_ARCH_TAG == RZ_ARCH_RISCV64 || \
-        RZ_ARCH_TAG == RZ_ARCH_AARCH64 || RZ_ARCH_TAG == RZ_ARCH_POWERPC || RZ_ARCH_TAG == RZ_ARCH_POWERPC64
+#    if RZ_TARGET_ANY(ARCH, X86_64, X86, ARM, RISCV32, RISCV64, AARCH64, POWERPC, POWERPC64)
 #        define RZ_PAGE_SIZE_MAX 4 << 10
-#    elif RZ_ARCH_TAG == RZ_ARCH_MIPS || RZ_ARCH_TAG == RZ_ARCH_MIPS64
+#    elif RZ_TARGET_ANY(ARCH, MIPS, MIPS64)
 #        define RZ_PAGE_SIZE_MAX 16 << 10
-#    else
-#        define RZ_PAGE_SIZE_MIN 1
-#        define RZ_PAGE_SIZE_MAX 1
 #    endif
-#elif defined(RZ_OS_HAIKU)
+#elif RZ_TARGET_OS_LINUX
 #    define RZ_PAGE_SIZE_MIN 4 << 10
-#    define RZ_PAGE_SIZE_MAX 4 << 10
-#elif defined(RZ_OS_LINUX)
-#    define RZ_PAGE_SIZE_MIN 4 << 10
-#    if RZ_ARCH_TAG == RZ_ARCH_X86_64 || RZ_ARCH_TAG == RZ_ARCH_X86 || RZ_ARCH_TAG == RZ_ARCH_ARM || RZ_ARCH_TAG == RZ_ARCH_RISCV32 || RZ_ARCH_TAG == RZ_ARCH_RISCV64 || \
-        RZ_ARCH_TAG == RZ_ARCH_XTENSA
+#    if RZ_TARGET_ANY(ARCH, X86_64, X86, ARM, RISCV32, RISCV64)
 #        define RZ_PAGE_SIZE_MAX 4 << 10
-#    elif RZ_ARCH_TAG == RZ_ARCH_AARCH64 || RZ_ARCH_TAG == RZ_ARCH_MIPS || RZ_ARCH_TAG == RZ_ARCH_MIPS64
+#    elif RZ_TARGET_ANY(ARCH, AARCH64, MIPS, MIPS64)
 #        define RZ_PAGE_SIZE_MAX 64 << 10
-#    elif RZ_ARCH_TAG == RZ_ARCH_POWERPC || RZ_ARCH_TAG == RZ_ARCH_POWERPC64
+#    elif RZ_TARGET_ANY(ARCH, POWERPC, POWERPC64)
 #        define RZ_PAGE_SIZE_MAX 256 << 10
-#    else
-#        define RZ_PAGE_SIZE_MIN 1
-#        define RZ_PAGE_SIZE_MAX 1
 #    endif
-#elif defined(RZ_OS_EMSCRIPTEN) || defined(RZ_OS_WASI)
+#elif RZ_TARGET_ANY(OS, EMSCRIPTEN, WASI)
 #    define RZ_PAGE_SIZE_MIN 64 << 10
 #    define RZ_PAGE_SIZE_MAX 64 << 10
-#else
-#    if (RZ_ARCH_TAG == RZ_ARCH_WASM32 || RZ_ARCH_TAG == RZ_ARCH_WASM64)
+#endif
+
+#if !defined(RZ_PAGE_SIZE_MIN) || !defined(RZ_PAGE_SIZE_MAX)
+#    if RZ_TARGET_ANY(ARCH, WASM32, WASM64)
+#        undef RZ_PAGE_SIZE_MIN
+#        undef RZ_PAGE_SIZE_MAX
 #        define RZ_PAGE_SIZE_MIN 64 << 10
 #        define RZ_PAGE_SIZE_MAX 64 << 10
-#    elif (RZ_ARCH_TAG == RZ_ARCH_X86_64 || RZ_ARCH_TAG == RZ_ARCH_X86) || (RZ_ARCH_TAG == RZ_ARCH_AARCH64)
+#    elif RZ_TARGET_ANY(RZ_IS_ARCH, X86_64, X86, AARCH64)
+#        undef RZ_PAGE_SIZE_MIN
+#        undef RZ_PAGE_SIZE_MAX
 #        define RZ_PAGE_SIZE_MIN 4 << 10
 #        define RZ_PAGE_SIZE_MAX 4 << 10
 #    else
@@ -105,13 +94,13 @@ RZ_DEF void *rz_raw_calloc(RZ_Allocator a, rz_usize num, rz_usize size) {
     void    *ptr        = rz_raw_alloc(a, bytes_size);
     if (ptr == NULL) return ptr;
 
-    return rz_memset(ptr, 0, bytes_size);
+    return memset(ptr, 0, bytes_size);
 }
 
 RZ_DEF void *rz_memdup(RZ_Allocator a, const void *data, rz_usize size) {
     void *new_data = rz_raw_alloc(a, size);
     if (new_data == NULL) return NULL;
-    rz_memcpy(new_data, data, size);
+    memcpy(new_data, data, size);
     return new_data;
 }
 
@@ -123,8 +112,8 @@ RZ_DEF rz_char *rz_strdup(RZ_Allocator a, const rz_char *str) {
 RZ_DEF void *rz_memcat(RZ_Allocator a, const void *l, rz_usize ln, const void *r, rz_usize rn) {
     rz_u8 *res = rz_alloc_bytes(a, ln + rn);
     if (res == NULL) return NULL;
-    rz_memcpy(res, l, ln);
-    rz_memcpy(res + ln, r, rn);
+    memcpy(res, l, ln);
+    memcpy(res + ln, r, rn);
     return res;
 }
 
@@ -132,12 +121,12 @@ static RZ_DEF rz_usize rz__query_page_size(void) {
     static rz_usize size = 0;
     if (size > 0) return size;
 
-#    if defined(RZ_OS_WINDOWS)
+#    if RZ_TARGET_OS_WINDOWS
     /* Windows */
     SYSTEM_INFO si;
     GetSystemInfo(&si);
     size = si.dwPageSize;
-#    elif defined(RZ_OS_LINUX)
+#    elif RZ_TARGET_OS_LINUX
 
 #        if (defined(__GNU_LIBRARY__) || defined(__GLIBC__) || defined(__GLIBC_MINOR__)) || defined(_SC_PAGE_SIZE)
     /* POSIX systems (Linux, macOS, BSD, etc.) */
@@ -146,7 +135,7 @@ static RZ_DEF rz_usize rz__query_page_size(void) {
 #        else
     size = getauxval(AT_PAGESZ);
 #        endif
-#    elif defined(RZ_OS_APPLE)
+#    elif RZ_TARGET_FAMILY_APPLE
     task_t task_port = mach_task_self();
     if (task_port == MACH_PORT_NULL) return 0;
 
@@ -406,84 +395,8 @@ RZ_DEF void rz_temp_rewind(RZ_ArenaMark m) {
 }
 #endif
 
-// RZ_DEF void *rz_memcpy(void *dest, const void *src, rz_usize n) {
-//     rz_u8       *d = dest;
-//     const rz_u8 *s = src;
-//     for (; n; n--) *d++ = *s++;
-//     return dest;
-// }
-//
-// RZ_DEF void *rz_memmove(void *dest, const void *src, size_t n) {
-//     char       *d = dest;
-//     const char *s = src;
-//
-//     if (d == s) return d;
-//     if ((uintptr_t)s - (uintptr_t)d - n <= -2 * n) return rz_memcpy(d, s, n);
-//
-//     if (d < s) {
-// #ifdef __GNUC__
-//         if ((uintptr_t)s % WS == (uintptr_t)d % WS) {
-//             while ((uintptr_t)d % WS) {
-//                 if (!n--) return dest;
-//                 *d++ = *s++;
-//             }
-//             for (; n >= WS; n -= WS, d += WS, s += WS) *(WT *)d = *(WT *)s;
-//         }
-// #endif
-//         for (; n; n--) *d++ = *s++;
-//     } else {
-// #ifdef __GNUC__
-//         if ((uintptr_t)s % WS == (uintptr_t)d % WS) {
-//             while ((uintptr_t)(d + n) % WS) {
-//                 if (!n--) return dest;
-//                 d[n] = s[n];
-//             }
-//             while (n >= WS) n -= WS, *(WT *)(d + n) = *(WT *)(s + n);
-//         }
-// #endif
-//         while (n) n--, d[n] = s[n];
-//     }
-//
-//     return dest;
-// }
-//
-// RZ_DEF const void *rz_memchr(const void *src, int c, size_t n) {
-//     const rz_u8 *s = src;
-//     c              = (rz_u8)c;
-//
-//     for (; n && *s != c; s++, n--);
-//     return n ? s : 0;
-// }
-//
-// RZ_DEF rz_ptrdiff rz_memcmp(const void *lhs, const void *rhs, rz_usize n) {
-//     const rz_u8 *l = lhs, *r = rhs;
-//     for (; n && *l == *r; n--, l++, r++);
-//     return n ? *l - *r : 0;
-// }
-//
-// RZ_DEF void *rz_memset(void *dest, rz_i32 c, rz_usize n) {
-//     rz_u8 *s = dest;
-//     size_t k;
-//
-//     if (!n) return dest;
-//     s[0] = c, s[n - 1] = c;
-//     if (n <= 2) return dest;
-//     s[1] = c, s[2] = c, s[n - 2] = c, s[n - 3] = c;
-//     if (n <= 6) return dest;
-//     s[3] = c, s[n - 4] = c;
-//     if (n <= 8) return dest;
-//
-//     k = -(uintptr_t)s & 3;
-//     s += k;
-//     n -= k;
-//     n &= -4;
-//
-//     for (; n; n--, s++) *s = c;
-//     return dest;
-// }
-
 RZ_DEF bool rz_memequal(const void *lhs, rz_usize lhs_size, const void *rhs, rz_usize rhs_size) {
-    return (lhs_size == rhs_size) && (rz_memcmp(lhs, rhs, lhs_size) == 0);
+    return (lhs_size == rhs_size) && (memcmp(lhs, rhs, lhs_size) == 0);
 }
 RZ_DEF bool rz_memswap(void *lhs, void *rhs, rz_usize n) {
     if ((lhs == NULL) || (rhs == NULL) || (n == 0)) return false;

@@ -7,62 +7,8 @@
 /// TODO: implement Per‑test child process. for now this simple test library is just one process.
 ///       if there any fatal error like segmentation fault, etc. the whole test executable finish.
 
-#    define RZ__TESTS_PREFIX(NAME) rz__tests_case_##NAME
-#    if defined(__cplusplus)
-#        if defined(RZ_CC_CLANG)
-#            define RZ__TESTS_INITIALIZER_BEGIN_DISABLE_WARNINGS _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Wglobal-constructors\"")
-#            define RZ__TESTS_INITIALIZER_END_DISABLE_WARNINGS   _Pragma("clang diagnostic pop")
-#        else
-#            define RZ__TESTS_INITIALIZER_BEGIN_DISABLE_WARNINGS
-#            define RZ__TESTS_INITIALIZER_END_DISABLE_WARNINGS
-#        endif
-#        define RZ__TESTS_INITIALIZER(FIXTURE, NAME)                                                                                                      \
-            struct RZ__TESTS_PREFIX(register_##FIXTURE##NAME) {                                                                                           \
-                RZ__TESTS_PREFIX(register_##FIXTURE##NAME)();                                                                                             \
-            };                                                                                                                                            \
-            RZ__TESTS_INITIALIZER_BEGIN_DISABLE_WARNINGS static RZ__TESTS_PREFIX(register_##FIXTURE##NAME) RZ__TESTS_PREFIX(register_##FIXTURE##NAME##_g) \
-                RZ__TESTS_INITIALIZER_END_DISABLE_WARNINGS;                                                                                               \
-            RZ__TESTS_PREFIX(register_##FIXTURE##NAME)::RZ__TESTS_PREFIX(register_##FIXTURE##NAME)()
-#    elif defined(RZ_CC_MSVC)
-#        if defined(RZ_OS_WINDOWS) && (RZ_ARCH_BITS == 64)
-#            define RZ__TESTS_SYMBOL_PREFIX
-#        else
-#            define RZ__TESTS_SYMBOL_PREFIX "_"
-#        endif
-#        if defined(RZ_CC_CLANG)
-#            define RZ__TESTS_INITIALIZER_BEGIN_DISABLE_WARNINGS _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Wmissing-variable-declarations\"")
-#            define RZ__TESTS_INITIALIZER_END_DISABLE_WARNINGS   _Pragma("clang diagnostic pop")
-#        else
-#            define RZ__TESTS_INITIALIZER_BEGIN_DISABLE_WARNINGS
-#            define RZ__TESTS_INITIALIZER_END_DISABLE_WARNINGS
-#        endif
-#        pragma section(".CRT$XCU", read)
-#        define RZ__TESTS_INITIALIZER(FIXTURE, NAME)                                                                                                               \
-            static void __cdecl RZ__TESTS_PREFIX(register_##FIXTURE##NAME)(void);                                                                                  \
-            RZ__TESTS_INITIALIZER_BEGIN_DISABLE_WARNINGS                                                                                                           \
-            __pragma(comment(linker, "/include:" RZ__TESTS_SYMBOL_PREFIX RZ_STRINGIFY(RZ__TESTS_PREFIX(register_##FIXTURE##NAME)) "_")) RZ_EXTERN_C                \
-                __declspec(allocate(".CRT$XCU")) void(__cdecl * RZ__TESTS_PREFIX(register_##FIXTURE##NAME##_))(void) = RZ__TESTS_PREFIX(register_##FIXTURE##NAME); \
-            RZ__TESTS_INITIALIZER_END_DISABLE_WARNINGS                                                                                                             \
-            static void __cdecl RZ__TESTS_PREFIX(register_##FIXTURE##NAME)(void)
-#    else
-#        if defined(__linux__)
-#            if defined(__clang__)
-#                if __has_warning("-Wreserved-id-macro")
-#                    pragma clang diagnostic push
-#                    pragma clang diagnostic ignored "-Wreserved-id-macro"
-#                endif
-#            endif
-#            define __STDC_FORMAT_MACROS 1
-#            if defined(__clang__)
-#                if __has_warning("-Wreserved-id-macro")
-#                    pragma clang diagnostic pop
-#                endif
-#            endif
-#        endif
-#        define RZ__TESTS_INITIALIZER(FIXTURE, NAME)                                                 \
-            static void RZ__TESTS_PREFIX(register_##FIXTURE##NAME)(void) __attribute__(constructor); \
-            static void RZ__TESTS_PREFIX(register_##FIXTURE##NAME)(void)
-#    endif
+#    define RZ__TESTS_PREFIX(NAME)               rz__tests_case_##NAME
+#    define RZ__TESTS_INITIALIZER(FIXTURE, NAME) RZ__INITIALIZER(RZ__TESTS_PREFIX(FIXTURE##NAME))
 
 #    define RZ_TESTS_FIXTURE(NAME) \
         typedef struct NAME NAME;  \
@@ -171,9 +117,9 @@
             }                                                                           \
         } while (0)
 
-#    define RZ_TESTS_MAIN()                                                                \
-        RZ__TestsGlobalCtx rz__tests_global_ctx = {0};                                     \
-        int                main(int argc, char *argv[]) {                                  \
+#    define RZ_TESTS_MAIN()                                                 \
+        RZ__TestsGlobalCtx rz__tests_global_ctx = {0};                      \
+        int                main(int argc, char *argv[]) {                   \
             rz__tests_global_ctx.file_name = __FILE__;                      \
             rz__tests_global_ctx.output    = stdout;                        \
             rz__tests_global_ctx.allocator = rz_std_allocator();            \

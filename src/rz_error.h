@@ -8,7 +8,7 @@
 extern "C" {
 #    endif
 
-#    if defined(RZ_OS_WINDOWS)
+#    if RZ_TARGET_OS_WINDOWS
 #        define rz_last_os_error GetLastError
 #        define RZ_OsError       DWORD
 #        define RZ_NO_ERROR      NO_ERROR
@@ -22,7 +22,7 @@ extern "C" {
 #    endif
 
 RZ_DEC const char *rz_strerror(void);
-RZ_DEC void        rz_set_error(RZ_OsError errnum, const char *tag, const char *file, rz_int line, RZ_PRINTF_FMT(const char *fmt), ...) RZ_PRINTF_FORMAT(3, 4);
+RZ_DEC void        rz_set_error(RZ_OsError errnum, const char *tag, const char *file, rz_int line, RZ_PRINTF_FMT(const char *fmt), ...) RZ_PRINTF_FORMAT(5, 6);
 
 #    ifdef __cplusplus
 } /* extern "C" */
@@ -30,5 +30,8 @@ RZ_DEC void        rz_set_error(RZ_OsError errnum, const char *tag, const char *
 
 #    define RZ_ERROR(TAG, MSG, ...)    rz_set_error(RZ_NO_ERROR, TAG, __FILE__, __LINE__, MSG __VA_OPT__(, ) __VA_ARGS__);
 #    define RZ_OS_ERROR(TAG, MSG, ...) rz_set_error(rz_last_os_error(), TAG, __FILE__, __LINE__, MSG __VA_OPT__(, ) __VA_ARGS__);
+
+#    define RZ_ERROR_INTR(MSG, ...)    rz_set_error(RZ_NO_ERROR, RZ_TAG, __FILE__, __LINE__, MSG __VA_OPT__(, ) __VA_ARGS__);
+#    define RZ_OS_ERROR_INTR(MSG, ...) rz_set_error(rz_last_os_error(), RZ_TAG, __FILE__, __LINE__, MSG __VA_OPT__(, ) __VA_ARGS__);
 
 #endif /* end of include guard: __RZ_ERROR_H */

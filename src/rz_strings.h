@@ -21,15 +21,6 @@ RZ_DEC bool    rz_is_ascii_upper(rz_char ch);
 RZ_DEC rz_char rz_ascii_lower(rz_char ch);
 RZ_DEC rz_char rz_ascii_upper(rz_char ch);
 
-RZ_DEC bool rz_strncmp(const rz_char *lhs, const rz_char *rhs, rz_usize max_size);
-RZ_DEC bool rz_strcmp(const rz_char *lhs, const rz_char *rhs);
-
-RZ_DEC bool rz_strncasecmp(const rz_char *lhs, const rz_char *rhs, rz_usize max_size);
-RZ_DEC bool rz_strcasecmp(const rz_char *lhs, const rz_char *rhs);
-
-RZ_DEC rz_usize rz_strlen(const char *s);
-RZ_DEC rz_usize rz_strnlen(const char *s, rz_usize max_len);
-
 /// Dynamic String or generally called String Builder
 typedef RZ_Array(rz_char) RZ_Str, RZ_StrBuilder;
 
@@ -37,9 +28,9 @@ RZ_DEC RZ_Str rz_str_sized_alloc(const rz_char *cstr, rz_usize size, RZ_Allocato
 #    define rz_str_sized(cstr, size)        rz_str_sized_alloc(cstr, size, NULL)
 #    define rz_str_sized_temp(cstr, size)   rz_str_sized_alloc(cstr, size, rz_temp_allocator())
 
-#    define rz_str_alloc(cstr, alloc)       rz_str_sized_alloc(cstr, rz_strlen(cstr), alloc)
-#    define rz_str(cstr)                    rz_str_sized(cstr, rz_strlen(cstr))
-#    define rz_str_temp(cstr)               rz_str_sized_temp(cstr, rz_strlen(cstr))
+#    define rz_str_alloc(cstr, alloc)       rz_str_sized_alloc(cstr, strlen(cstr), alloc)
+#    define rz_str(cstr)                    rz_str_sized(cstr, strlen(cstr))
+#    define rz_str_temp(cstr)               rz_str_sized_temp(cstr, strlen(cstr))
 
 #    define rz_str_from_sv_alloc(sv, alloc) rz_str_sized_alloc((sv).data, (sv).len, alloc)
 #    define rz_str_from_sv(sv)              rz_str_sized((sv).data, (sv).len)
@@ -61,7 +52,7 @@ RZ_DEC RZ_Str rz_strf(RZ_Allocator a, const rz_char *fmt, ...) RZ_PRINTF_FORMAT(
             (s)->len--;             \
         } while (0)
 #    define rz_str_append_sized_str(s, str, size) rz_arr_append_many(s, str, size)
-#    define rz_str_append_cstr(s, cstr)           rz_str_append_sized_str(s, cstr, rz_strlen(cstr))
+#    define rz_str_append_cstr(s, cstr)           rz_str_append_sized_str(s, cstr, strlen(cstr))
 #    define rz_str_append_sv(s, sv)               rz_str_append_sized_str(s, (sv).data, (sv).len)
 
 #    define rz_str2sv(str)                        ((RZ_StrView){.data = (str)->data, .len = (str)->len})
@@ -74,7 +65,7 @@ RZ_DEC const char *rz_str_to_cstr(RZ_Str *s);
 /// String View (slice of string or sized string)
 typedef RZ_ArrayView(rz_char) RZ_StrView;
 
-#    define rz_sv(cstr)             ((RZ_StrView){.data = (char *)cstr, .len = (cstr) ? rz_strlen(cstr) : 0})
+#    define rz_sv(cstr)             ((RZ_StrView){.data = (char *)cstr, .len = (cstr) ? strlen(cstr) : 0})
 #    define rz_sv_sized(cstr, size) ((RZ_StrView){.data = (char *)cstr, .len = size})
 #    define rz_sv_from_str(str)     ((RZ_StrView){.data = (char *)(str)->data, .len = (str)->len})
 #    define rz_sv_empty             rz_sv_sized(NULL, 0)
@@ -110,7 +101,7 @@ RZ_DEC rz_usize rz_sv_rfind_by(RZ_StrView sv, RZ_StrViewCharPredicate fn);
 
 RZ_DEC bool rz_sv_starts_with(RZ_StrView sv, RZ_StrView starts_sv);
 #    define rz_sv_starts_with_cstr(sv, starts) rz_sv_starts_with(sv, rz_sv(starts))
-#    define rz_sv_starts_with_char(sv, ch)     ((sv.len == 0 || sv.data == NULL) ? false : (sv.datap[0] == ch))
+#    define rz_sv_starts_with_char(sv, ch)     (((sv).len == 0 || (sv).data == NULL) ? false : ((sv).data[0] == ch))
 
 RZ_DEC bool rz_sv_ends_with(RZ_StrView sv, RZ_StrView ends_sv);
 #    define rz_sv_ends_with_cstr(sv, ends) rz_sv_ends_with(sv, rz_sv(ends))

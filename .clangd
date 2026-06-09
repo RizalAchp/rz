@@ -1,7 +1,9 @@
-CompileFlags:                     # Tweak the parse settings
+If:
+  PathMatch: [src/.*\.h, src/.*\.c]
+CompileFlags:
   Add: [
-    -Isrc, -std=c23, -xc, -ggdb,
+    -DRZ_IMPLEMENTATION, -Isrc, -xc, -std=gnu23,
     -Wall, -Wextra, -Wfloat-equal, -Wundef, -Wpointer-arith,
-    -Wstrict-prototypes, -Wswitch-default, -Wswitch-enum, 
-    -Wpedantic, -pedantic, 
+    -Wswitch-default, -Wswitch-enum,
+    -Wpedantic, -pedantic,
   ]
