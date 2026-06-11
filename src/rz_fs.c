@@ -9,17 +9,31 @@
 
 #define RZ_TAG "rz_fs"
 
+RZ_ALWAYS_INLINE static bool rz__path_is_sep(char ch) {
+    return ((ch == RZ_PATH_WINDOWS_SEP) || (ch == RZ_PATH_UNIX_SEP));
+}
+RZ_ALWAYS_INLINE static bool rz__path_is_verbatim(const RZ_Path path) {
+    return (rz_sv_starts_with(path, rz_sv_static("\\\\?\\")) || rz_sv_starts_with(path, rz_sv_static("\\??\\")));
+}
+RZ_ALWAYS_INLINE static bool rz__path_is_rooted_current_drive(RZ_Path path) {
+    return (path.len > 0) && rz__path_is_sep(path.data[0]);
+}
 #if RZ_TARGET_OS_WINDOWS
 /* --- Windows path predicates --- */
 #    define RZ__FILE_SHARE_MODE_DEFAULT FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+RZ_ALWAYS_INLINE static bool rz__path_is_drive_letter(const RZ_Path path) {
+    return (path.len < 2) && ((rz_in_range(path.data[0], 'A', 'Z') || rz_in_range(path.data[0], 'a', 'z')) || (path.data[1] == ':'));
+}
+RZ_ALWAYS_INLINE static bool rz__path_is_drive_absolute_strict(const RZ_Path path) {
+    return ((path.len >= 3) && rz__path_is_drive_letter(path) && rz__path_is_sep(path.data[2]));
+}
+RZ_ALWAYS_INLINE static bool rz__path_is_unc(const RZ_Path path) {
+    return rz_sv_starts_with(path, rz_sv_static("\\\\"));
+}
+RZ_ALWAYS_INLINE static bool rz__path_is_device_namespace(RZ_Path path) {
+    return rz_sv_starts_with(path, rz_sv_static("\\\\.\\"));
+}
 #endif
-#define rz__path_is_sep(expr)                   (((expr) == RZ_PATH_WINDOWS_SEP) || ((expr) == RZ_PATH_UNIX_SEP))
-#define rz__path_is_drive_letter(path)          (path.len < 2) && ((rz_in_range(path.data[0], 'A', 'Z') || rz_in_range(path.data[0], 'a', 'z')) || (path.data[1] == ':'))
-#define rz__path_is_drive_absolute_strict(path) ((path.len >= 3) && rz__path_is_drive_letter(path) && rz__path_is_sep(path.data[2]))
-#define rz__path_is_unc(path)                   rz_sv_starts_with(path, rz_sv_static("\\\\"))
-#define rz__path_is_verbatim(path)              (rz_sv_starts_with(path, rz_sv_static("\\\\?\\")) || rz_sv_starts_with(path, rz_sv_static("\\??\\")))
-#define rz__path_is_device_namespace(path)      rz_sv_starts_with(path, rz_sv_static("\\\\.\\"))
-#define rz__path_is_rooted_current_drive(path)  (path.len > 0) && rz__path_is_sep(path.data[0])
 
 RZ_DEF const char *rz_pathbuf_cstr(RZ_PathBuf *path) {
     RZ_DBG_ASSERT_NOT_NULL(path);
@@ -61,8 +75,7 @@ RZ_DEF bool rz_pathbuf_set_filestem(RZ_PathBuf *path, RZ_Path filestem) {
         rz_arr_truncate(path, begin_filename - begin_orig);
     }
 
-    auto save         = rz_temp_snapshot();
-
+    auto    save      = rz_temp_snapshot();
     RZ_Path extension = {0};
     if (!rz_arr_is_empty(&filename)) {
         // if path contains filename. add the extension to the path again.
@@ -172,22 +185,12 @@ RZ_DEF void rz_pathbuf_push(RZ_PathBuf *path, RZ_Path component) {
     return;
 }
 
-#ifndef RZ__PATH_CSTR_BUF_LEN
-#    define RZ__PATH_CSTR_BUF_LEN (8 * 1024)
-#endif
-static thread_local char rz__path_cstr_buf[RZ__PATH_CSTR_BUF_LEN] = {0};
-static const char       *rz__path_cstr_internal(const RZ_Path path) {
-    RZ_ASSERT(path.len >= RZ__PATH_CSTR_BUF_LEN, "redefined RZ__PATH_CSTR_BUF_LEN with bigger value");
-    memcpy(rz__path_cstr_buf, path.data, path.len);
-    rz__path_cstr_buf[path.len] = 0;
-    return rz__path_cstr_buf;
-}
+#define rz__path_cstr_temp(path) rz_path_cstr(path, rz_temp_allocator())
 
 RZ_DEF const char *rz_path_cstr(const RZ_Path path, RZ_Allocator allocator) {
     if (rz_arr_is_empty(&path)) return rz_strdup(allocator, "");
     char *p = rz_alloc_bytes(allocator, path.len + 1);
     RZ_ASSERT_ALLOCATOR_PTR(p);
-
     memcpy(p, path.data, path.len);
     p[path.len] = '\0';
     return p;
@@ -198,7 +201,7 @@ RZ_DEF bool rz_path_filename(const RZ_Path path, RZ_Path *filename) {
     if (rz_arr_is_empty(&path)) return false;
 
     RZ_Path p = path;
-    while (rz_sv_rsplit_char(&p, RZ_PATH_SEP, filename)) {
+    while (rz_sv_rsplit_by(&p, rz__path_is_sep, filename)) {
         // if empty its mean the end is '/'. continue until the path is empty
         if (rz_arr_is_empty(filename) || rz_sv_eq(*filename, rz_sv_static("."))) continue;
 
@@ -252,8 +255,15 @@ RZ_DEF bool rz_path_has_extension(const RZ_Path path, RZ_Path ext) {
 
 RZ_DEF bool rz_path_parent_dir(const RZ_Path path, RZ_Path *parent_dir) {
     RZ_DBG_ASSERT(parent_dir != NULL);
-    RZ_UNUSED(path);
-    RZ_TODO("rz_path_parent_dir");
+    RZ_Path right = {0};
+    *parent_dir   = path;
+    while (rz_sv_rsplit_by(parent_dir, rz__path_is_sep, &right)) {
+        // if like this. the right is empty. ex: "/this/is/path/" "/this/is/path/."
+        if (rz_sv_is_empty(right) || rz_sv_eq(right, rz_sv_static("."))) continue;
+        break;
+    }
+    if (rz_sv_is_empty(*parent_dir)) return rz_path_is_relative(path);
+    return true;
 }
 
 RZ_DEF bool rz_path_is_absolute(const RZ_Path path) {
@@ -371,6 +381,7 @@ static RZ_PathFileType rz__path_filetype(mode_t mode) {
 }
 
 static void rz__path_metadata_from_stat(struct stat s, RZ_PathMetadata *m) {
+    m->perm = s.st_mode;
     m->size = (rz_u64)s.st_size;
     m->type = rz__path_filetype(s.st_mode);
 #    if RZ_TARGET_OS_NETBSD
@@ -410,11 +421,17 @@ static inline bool rz__path_metadata(const char *path, bool symlink, RZ_PathMeta
 #endif
 
 RZ_DEF bool rz_path_metadata(const RZ_Path path, RZ_PathMetadata *metadata) {
-    return rz__path_metadata(rz__path_cstr_internal(path), false, metadata);
+    auto m      = rz_temp_snapshot();
+    auto result = rz__path_metadata(rz__path_cstr_temp(path), false, metadata);
+    rz_temp_rewind(m);
+    return result;
 }
 
 RZ_DEF bool rz_path_symlink_metadata(const RZ_Path path, RZ_PathMetadata *metadata) {
-    return rz__path_metadata(rz__path_cstr_internal(path), true, metadata);
+    auto m      = rz_temp_snapshot();
+    auto result = rz__path_metadata(rz__path_cstr_temp(path), true, metadata);
+    rz_temp_rewind(m);
+    return result;
 }
 
 #define rz__path_metadata_check_access(path, access, onerror) \
@@ -447,15 +464,20 @@ RZ_DEF RZ_SystemTime rz_path_created(const RZ_Path path) {
 #undef rz__path_metadata_check_access
 
 RZ_DEF bool rz_fs_exists(const RZ_Path path) {
+    auto m = rz_temp_snapshot();
 #if RZ_TARGET_OS_WINDOWS
-    return GetFileAttributesA(rz__path_cstr_internal(path)) != INVALID_FILE_ATTRIBUTES;
+    bool result = GetFileAttributesA(rz__path_cstr_temp(path)) != INVALID_FILE_ATTRIBUTES;
 #else
-    return access(rz__path_cstr_internal(path), F_OK) == 0;
+    bool result = access(rz__path_cstr_temp(path), F_OK) == 0;
 #endif
+    rz_temp_rewind(m);
+    return result;
 }
 
 RZ_DEF bool rz_fs_read_symlink(const RZ_Path path, RZ_PathBuf *symlink_result) {
-    const char *path_cstr = rz__path_cstr_internal(path);
+    bool        result    = true;
+    auto        m         = rz_temp_snapshot();
+    const char *path_cstr = rz__path_cstr_temp(path);
 #if RZ_TARGET_OS_WINDOWS
     // HANDLE h = CreateFileA(path_cstr, 0, RZ__FILE_SHARE_MODE_DEFAULT, NULL, 0, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);
     // if (h == INVALID_HANDLE_VALUE) {
@@ -475,11 +497,14 @@ RZ_DEF bool rz_fs_read_symlink(const RZ_Path path, RZ_PathBuf *symlink_result) {
     auto r = readlink(path_cstr, symlink_result->data, symlink_result->capacity);
     if (r < 0) {
         RZ_OS_ERROR_INTR("Failed to read_symlink for (path: %s)", path_cstr);
-        return false;
+        rz_return_defer(false);
     }
     symlink_result->len = r;
-    return true;
+    rz_return_defer(true);
 #endif
+defer:
+    rz_temp_rewind(m);
+    return result;
 }
 
 RZ_DEF bool rz_fs_canonicalize(RZ_PathBuf *path) {
@@ -633,15 +658,17 @@ RZ_DEF bool rz_fs_current_dir(RZ_PathBuf *path) {
 }
 
 RZ_DEF bool rz_fs_set_current_dir(const RZ_Path path) {
-    bool res       = true;
-    auto path_cstr = rz__path_cstr_internal(path);
+    auto m         = rz_temp_snapshot();
+    bool result    = true;
+    auto path_cstr = rz__path_cstr_temp(path);
 #if RZ_TARGET_OS_WINDOWS
-    res = SetCurrentDirectoryA(path_cstr);
+    result = SetCurrentDirectoryA(path_cstr);
 #else
-    res = chdir(path_cstr) == 0;
+    result = chdir(path_cstr) == 0;
 #endif
-    if (!res) RZ_OS_ERROR_INTR("Failed to change directory to (path: %s)", path_cstr);
-    return res;
+    if (!result) RZ_OS_ERROR_INTR("Failed to change directory to (path: %s)", path_cstr);
+    rz_temp_rewind(m);
+    return result;
 }
 
 RZ_DEF bool rz_fs_current_exe(RZ_PathBuf *path) {
@@ -738,14 +765,18 @@ failed:
     RZ_ERROR("this platform is not supported or not implemented to get home directory");
     return false;
 #    else
+    bool          result = true;
+    auto          m      = rz_temp_snapshot();
     struct passwd p = {0}, *presult = NULL;
-    auto          res = getpwuid_r(getuid(), &p, rz__path_cstr_buf, RZ__PATH_CSTR_BUF_LEN, &presult);
+    auto          res = getpwuid_r(getuid(), &p, rz_alloc_bytes(rz_temp_allocator(), RZ_PATH_MAX), RZ_PATH_MAX, &presult);
     if ((res != 0) || presult == NULL) {
         RZ_OS_ERROR_INTR("Failed to get home directory");
-        return false;
+        rz_return_defer(false);
     }
     rz_str_append_cstr(path, presult->pw_dir);
-    return true;
+defer:
+    rz_temp_rewind(m);
+    return result;
 #    endif
 #endif
 }
@@ -787,16 +818,95 @@ RZ_DEF bool rz_fs_temp_dir(RZ_PathBuf *path) {
 #endif
 }
 
-static bool rz__fs_symlink_soft(const RZ_Path src_path, RZ_PathMetadata src_meta, const RZ_Path dst_path, RZ_PathMetadata *dst_meta) {
-    RZ_UNUSED_ALL(src_path, src_meta, dst_path, dst_meta);
-    RZ_TODO("rz__fs_symlink");
+static bool rz__fs_symlink_soft(const char *orig, const char *link, bool orig_is_dir) {
+#if RZ_TARGET_OS_WINDOWS
+    auto flags = (orig_is_dir) ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0;
+    if (CreateSymbolicLinkA(link, orig, flags | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)) return true;
+    if (rz_last_os_error() == ERROR_INVALID_PARAMETER) {
+        // Older Windows objects to SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE,
+        // so if we encounter ERROR_INVALID_PARAMETER, retry without that flag.
+        if (CreateSymbolicLinkA(link, orig, flags)) return true;
+    }
+#else
+    RZ_UNUSED(orig_is_dir);
+    if (symlink(orig, link) == 0) return true;
+#endif
+    RZ_OS_ERROR_INTR("Failed to create symlink for (%s => %s)", orig, link);
+    return false;
 }
-static bool rz__fs_symlink_hard(const RZ_Path src_path, RZ_PathMetadata src_meta, const RZ_Path dst_path, RZ_PathMetadata *dst_meta) {
-    RZ_UNUSED_ALL(src_path, src_meta, dst_path, dst_meta);
-    RZ_TODO("rz__fs_hardlink");
+static bool rz__fs_symlink_hard(const char *orig, const char *linkp) {
+#if RZ_TARGET_OS_WINDOWS
+    if (CreateHardLinkA(linkp, orig, NULL)) return true;
+#else
+    // Android has `linkat` on newer versions, but we happen to know
+    // `link` always has the correct behavior, so it's here as well.
+#    if RZ_TARGET_OS_ANDROID
+    if (link(orig, linkp) == 0) return true;
+#    else
+    if (linkat(AT_FDCWD, orig, AT_FDCWD, linkp, 0) == 0) return true;
+#    endif
+#endif
+    RZ_OS_ERROR_INTR("Failed to create hardlink for (%s => %s)", orig, linkp);
+    return false;
 }
-static bool rz__fs_copy_file(const RZ_Path src_path, RZ_PathMetadata src_meta, const RZ_Path dst_path, RZ_PathMetadata *dst_meta) {
-    RZ_UNUSED_ALL(src_path, src_meta, dst_path, dst_meta);
+
+static bool rz__fs_copy_file(const char *src_path, const char *dst_path) {
+#if RZ_TARGET_OS_WINDOWS
+    rz_u64 size = 0;
+    if (CopyFileA(src_path, dst_path, TRUE)) return true;
+    RZ_OS_ERROR_INTR("Failed to copy file (%s => %s)", orig, linkp);
+    return false;
+#else
+    bool  result = true;
+    RZ_Fd src_fd = RZ_INVALID_FD;
+    RZ_Fd dst_fd = RZ_INVALID_FD;
+    src_fd       = rz_fd_open_cstr_read(src_path);
+    if (src_fd == RZ_INVALID_FD) rz_return_defer(false);
+
+    struct stat src_stat = {0};
+    if (fstat(src_fd, &src_stat) != 0) {
+        RZ_OS_ERROR_INTR("Failed to get metadata from fd: %d", src_fd);
+        rz_return_defer(false);
+    }
+    dst_fd = rz_fd_open_cstr_write(dst_path, .perm = src_stat.st_mode);
+    if (dst_fd == RZ_INVALID_FD) rz_return_defer(false);
+
+#    if RZ_TARGET_ANY(OS, LINUX, ANDROID)
+    off_t copied = 0;
+    while (copied < src_stat.st_size) {
+        ssize_t written = sendfile(src_fd, dst_fd, &copied, SSIZE_MAX);
+        if (written < 0) rz_return_defer(false);
+        copied += written;
+    }
+#    elif RZ_TARGET_FAMILY_APPLE
+    // fcopyfile(3) is supported on OS X 10.5+
+    if (fcopyfile(src_fd, dst_fd, 0, COPYFILE_ALL) < 0) rz_return_defer(false);
+
+#    elif RZ_TARGET_OS_FREEBSD
+    off_t copied = 0;
+    while (copied < file_stat.st_size) {
+        ssize_t written = copy_file_range(srz_fd, 0, dst_fd, NULL, SSIZE_MAX, 0);
+        if (written == -1) rz_return_defer(false);
+        copied += written;
+    }
+#    else
+    RZ_BytesArray array = {.allocator = rz_std_allocator()};
+    if (rz_fd_read_all(src_fd, &array)) {
+        if (!rz_fd_write_all(dst_fd, array.data, array.len)) {
+            result = false;
+        }
+    } else {
+        result = false;
+    }
+    rz_arr_free(&array);
+#    endif
+defer:
+    if (!result) RZ_OS_ERROR_INTR("Failed to copy file: (%s => %s)", src_path, dst_path);
+    if (src_fd != RZ_INVALID_FD) rz_fd_close(src_fd);
+    if (dst_fd != RZ_INVALID_FD) rz_fd_close(dst_fd);
+    return result;
+
+#endif
     RZ_TODO("rz__fs_copy_file");
 }
 
@@ -874,13 +984,13 @@ RZ_DEF bool rz_fs_copy_opt(const RZ_Path src_path, const RZ_Path dst_path, RZ_Fs
     if (!is_src_dir_recursive) {
         switch (opt.mode) {
         case RZ_FS_COPY_CONTENT:
-            result = rz__fs_copy_file(src_path, src_meta, dst_path, dst_meta_ref);
+            // result = rz__fs_copy_file(src_path, src_meta, dst_path, dst_meta_ref);
             break;
         case RZ_FS_COPY_SOFT_LINK:
-            result = rz__fs_symlink_soft(src_path, src_meta, dst_path, dst_meta_ref);
+            // result = rz__fs_symlink_soft(src_path, src_meta, dst_path, dst_meta_ref);
             break;
         case RZ_FS_COPY_HARD_LINK:
-            result = rz__fs_symlink_hard(src_path, src_meta, dst_path, dst_meta_ref);
+            // result = rz__fs_symlink_hard(src_path, src_meta, dst_path, dst_meta_ref);
             break;
         default:
             RZ_UNREACHABLE("opt.mode: %d", opt.mode);
@@ -902,13 +1012,13 @@ RZ_DEF bool rz_fs_copy_opt(const RZ_Path src_path, const RZ_Path dst_path, RZ_Fs
         }
         switch (opt.mode) {
         case RZ_FS_COPY_CONTENT:
-            result = rz__fs_copy_file(src_path, src_meta, dst_path, dst_meta_ref);
+            // result = rz__fs_copy_file(src_path, src_meta, dst_path, dst_meta_ref);
             break;
         case RZ_FS_COPY_SOFT_LINK:
-            result = rz__fs_symlink_soft(src_path, src_meta, dst_path, dst_meta_ref);
+            // result = rz__fs_symlink_soft(src_path, src_meta, dst_path, dst_meta_ref);
             break;
         case RZ_FS_COPY_HARD_LINK:
-            result = rz__fs_symlink_hard(src_path, src_meta, dst_path, dst_meta_ref);
+            // result = rz__fs_symlink_hard(src_path, src_meta, dst_path, dst_meta_ref);
             break;
         default:
             RZ_UNREACHABLE("opt.mode: %d", opt.mode);
@@ -921,68 +1031,194 @@ defer:
     rz_arr_free(&src_path_buf);
     rz_arr_free(&dst_path_buf);
     return result;
-    RZ_UNUSED_ALL(src_path, dst_path, opt);
-    RZ_TODO("rz_fs_copy_opt");
 }
 
-static bool rz__fs_create_dir(const RZ_Path dir_path) {
-    RZ_UNUSED(dir_path);
-    RZ_TODO("rz__fs_create_dir");
+typedef enum : rz_u8
+{
+    RZ__CREATE_DIR_STATUS_OK = 0,
+    RZ__CREATE_DIR_STATUS_ALREADY_EXISTS,
+    RZ__CREATE_DIR_STATUS_PARENT_NOT_EXISTS,
+    RZ__CREATE_DIR_STATUS_ERROR,
+} RZ__CreateDirStatus;
+static RZ__CreateDirStatus rz__fs_create_dir(const RZ_Path dir_path, rz_u32 perm) {
+    RZ__CreateDirStatus result    = RZ__CREATE_DIR_STATUS_OK;
+    auto                m         = rz_temp_snapshot();
+    auto                path_cstr = rz__path_cstr_temp(dir_path);
+#if RZ_TARGET_OS_WINDOWS
+    if (!CreateDirectoryA(path_cstr, NULL)) {
+        auto errc = rz_last_os_error();
+        if (errc == ERROR_ALREADY_EXISTS) rz_return_defer(RZ__CREATE_DIR_STATUS_ALREADY_EXISTS);
+        if (errc == ERROR_PATH_NOT_FOUND) rz_return_defer(RZ__CREATE_DIR_STATUS_PARENT_NOT_EXISTS);
+        rz_return_defer(RZ__CREATE_DIR_STATUS_ERROR);
+    }
+#else
+    if (mkdir(path_cstr, perm) != 0) {
+        auto errc = rz_last_os_error();
+        if (errc == EEXIST) rz_return_defer(RZ__CREATE_DIR_STATUS_ALREADY_EXISTS);
+        if (errc == ENOENT) rz_return_defer(RZ__CREATE_DIR_STATUS_PARENT_NOT_EXISTS);
+        rz_return_defer(RZ__CREATE_DIR_STATUS_ERROR);
+    }
+#endif
+defer:
+    rz_temp_rewind(m);
+    return result;
 }
 
 RZ_DEF bool rz_fs_create_dir_opt(const RZ_Path dir_path, RZ_FsCreateDirOpt opt) {
-    bool exists = rz_fs_exists(dir_path);
-    if (exists && opt.skip_exists) return true;
-    if (!opt.all) return rz__fs_create_dir(dir_path);
-    RZ_PathBuf pb = rz_pathbuf_from_path_alloc(dir_path, rz_std_allocator());
-    if (!rz_fs_canonicalize(&pb)) return false;
+    if (rz_path_is_empty(dir_path)) return true;
+    if (opt.perm == 0) opt.perm = RZ_DEFAULT_DIRECTORY_CREATION_PERMISION;
 
-    RZ_UNUSED_ALL(dir_path, opt);
-    RZ_TODO("rz_fs_create_dir_opt");
+    bool result                     = true;
+    RZ_Array(RZ_Path) uncreated_dir = {.allocator = rz_std_allocator()};
+
+    auto ret                        = rz__fs_create_dir(dir_path, opt.perm);
+    switch (ret) {
+    case RZ__CREATE_DIR_STATUS_OK:
+        rz_return_defer(true);
+    case RZ__CREATE_DIR_STATUS_ALREADY_EXISTS: {
+        if (opt.skip_exists) {
+            RZ_LOGI_INTR("Create Directory: " RZ_PathFmt ". is already exists.", RZ_PathArg(dir_path));
+            rz_return_defer(true);
+        }
+        rz_return_defer(false);
+    }
+    case RZ__CREATE_DIR_STATUS_PARENT_NOT_EXISTS: {
+        if (opt.all) {
+            rz_arr_append(&uncreated_dir, dir_path);
+            break;
+        }
+        // fallthrough
+    }
+    case RZ__CREATE_DIR_STATUS_ERROR:
+        RZ_OS_ERROR_INTR("Failed to create directory: " RZ_PathFmt, RZ_PathArg(dir_path))
+        rz_return_defer(false);
+    default:
+        RZ_UNREACHABLE("rz__fs_create_dir");
+    }
+
+    RZ_Path dir        = dir_path;
+    RZ_Path dir_parent = {0};
+    while (rz_path_parent_dir(dir, &dir_parent)) {
+        dir             = dir_parent;
+
+        bool break_loop = false;
+
+        auto ret        = rz__fs_create_dir(dir_parent, opt.perm);
+        switch (ret) {
+        case RZ__CREATE_DIR_STATUS_OK:
+            break_loop = true;
+            break;
+        case RZ__CREATE_DIR_STATUS_PARENT_NOT_EXISTS:
+            rz_arr_append(&uncreated_dir, dir_parent);
+            break;
+
+        case RZ__CREATE_DIR_STATUS_ALREADY_EXISTS: {
+            if (rz_path_is_dir(dir_parent)) {
+                break_loop = true;
+                break;
+            }
+            // if its already exists but not directory. error
+            // fallthrough
+        }
+        case RZ__CREATE_DIR_STATUS_ERROR:
+            RZ_OS_ERROR_INTR("Failed to create parent directory " RZ_PathFmt ". while creating directory " RZ_PathFmt, RZ_PathArg(dir_parent), RZ_PathArg(dir_path))
+            rz_return_defer(false);
+        default:
+            RZ_UNREACHABLE("rz__fs_create_dir");
+        }
+
+        if (break_loop) break;
+    }
+
+    for (rz_usize i = uncreated_dir.len; i-- > 0;) {
+        dir      = uncreated_dir.data[i];
+        auto ret = rz__fs_create_dir(dir, opt.perm);
+        if (ret != RZ__CREATE_DIR_STATUS_OK) {
+            if ((ret == RZ__CREATE_DIR_STATUS_ALREADY_EXISTS) && !rz_path_is_dir(dir)) {
+                RZ_OS_ERROR_INTR("Failed to create parent directory " RZ_PathFmt ". while creating directory " RZ_PathFmt, RZ_PathArg(dir_parent), RZ_PathArg(dir))
+                rz_return_defer(false);
+            }
+        }
+    }
+defer:
+    rz_arr_free(&uncreated_dir);
+    return result;
 }
 
 static bool rz__fs_remove_file(const RZ_Path path, bool ignore_non_existing, bool ignore_access_denied) {
+    bool result    = true;
+    auto m         = rz_temp_snapshot();
+    auto path_cstr = rz__path_cstr_temp(path);
 #if RZ_TARGET_OS_WINDOWS
-    RZ_UNUSED_ALL(path, ignore_error);
-    RZ_TODO("rz__fs_remove_file");
+    if (DeleteFileA(path_cstr)) rz_return_defer(true);
+
+    auto last_err = rz_last_os_error();
+    if ((last_err == ERROR_FILE_NOT_FOUND) && ignore_non_existing) {
+        RZ_LOGI_INTR("Try to remove non existing (file: %s). but ignored", path_cstr);
+        rz_return_defer(true);
+    }
+    if (last_err == ERROR_ACCESS_DENIED) {
+        if (ignore_access_denied) {
+            RZ_LOGI_INTR("Try to remove access denied (file: %s). but ignored", path_cstr);
+            rz_return_defer(true);
+        }
+        // TODO: `DeleteFileW` fails with ERROR_ACCESS_DENIED then try to remove the file while ignoring the readonly attribute.
+    }
+    RZ_OS_ERROR_INTR("Failed to remove (file: %s)", path_cstr);
+    result = false;
 #else
-    auto path_cstr = rz__path_cstr_internal(path);
-    if (unlink(path_cstr) == 0) return true;
+    if (unlink(path_cstr) == 0) rz_return_defer(true);
 
     auto last_err = rz_last_os_error();
     if ((last_err == ENOENT) && ignore_non_existing) {
         RZ_LOGI_INTR("Try to remove non existing (file: %s). but ignored", path_cstr);
-        return true;
+        rz_return_defer(true);
     }
     if (((last_err == EPERM) || (last_err == EACCES)) && ignore_access_denied) {
-        RZ_LOGI_INTR("Try to remove access denied (directory: %s). but ignored", path_cstr);
-        return true;
+        RZ_LOGI_INTR("Try to remove access denied (file: %s). but ignored", path_cstr);
+        rz_return_defer(true);
     }
     RZ_OS_ERROR_INTR("Failed to remove (file: %s)", path_cstr);
-    return false;
-
+    result = false;
 #endif
+defer:
+    rz_temp_rewind(m);
+    return result;
 }
 static bool rz__fs_remove_dir(const RZ_Path path, bool ignore_non_existing, bool ignore_access_denied) {
+    bool result    = true;
+    auto m         = rz_temp_snapshot();
+    auto path_cstr = rz__path_cstr_temp(path);
 #if RZ_TARGET_OS_WINDOWS
-    DeleteFileA() RZ_UNUSED_ALL(path, ignore_error);
-    RZ_TODO("rz__fs_remove_dir");
+    if (RemoveDirectoryA(path_cstr)) rz_return_defer(true);
+
+    auto last_err = rz_last_os_error();
+    if ((last_err == ERROR_FILE_NOT_FOUND) && ignore_non_existing) {
+        RZ_LOGI_INTR("Try to remove non existing (directory: %s). but ignored", path_cstr);
+        rz_return_defer(true);
+    } else if ((last_err == ERROR_ACCESS_DENIED) && ignore_access_denied) {
+        RZ_LOGI_INTR("Try to remove access denied (directory: %s). but ignored", path_cstr);
+        rz_return_defer(true);
+    }
+    RZ_OS_ERROR_INTR("Failed to remove (directory: %s)", path_cstr);
+    result = false;
 #else
-    auto path_cstr = rz__path_cstr_internal(path);
-    if (rmdir(path_cstr) == 0) return true;
+    if (rmdir(path_cstr) == 0) rz_return_defer(true);
 
     auto last_err = rz_last_os_error();
     if ((last_err == ENOENT) && ignore_non_existing) {
         RZ_LOGI_INTR("Try to remove non existing (directory: %s). but ignored", path_cstr);
-        return true;
-    }
-    if (((last_err == EPERM) || (last_err == EACCES)) && ignore_access_denied) {
+        rz_return_defer(true);
+    } else if (((last_err == EPERM) || (last_err == EACCES)) && ignore_access_denied) {
         RZ_LOGI_INTR("Try to remove access denied (directory: %s). but ignored", path_cstr);
-        return true;
+        rz_return_defer(true);
     }
     RZ_OS_ERROR_INTR("Failed to remove (directory: %s)", path_cstr);
-    return false;
+    result = false;
 #endif
+defer:
+    rz_temp_rewind(m);
+    return result;
 }
 
 RZ_DEF bool rz_fs_remove_opt(const RZ_Path path, RZ_FsRemoveOpt opt) {
@@ -1025,9 +1261,46 @@ defer:
     return result;
 }
 
-RZ_DEF bool rz_fs_rename_opt(const RZ_Path before_path, const RZ_Path after_path, RZ_FsRenameOpt opt) {
-    RZ_UNUSED_ALL(before_path, after_path, opt);
-    RZ_TODO("rz_fs_rename_opt");
+RZ_DEF bool rz_fs_rename_opt(const RZ_Path old, const RZ_Path new, RZ_FsRenameOpt opt) {
+    bool result = true;
+    auto m      = rz_temp_snapshot();
+
+    if (!rz_fs_exists(old)) {
+        RZ_LOGI_INTR("Try to Rename non existing path (" RZ_PathFmt " => " RZ_PathFmt ")", RZ_PathArg(old), RZ_PathArg(new));
+        return false;
+    }
+
+    bool new_exists = rz_fs_exists(new);
+    if (new_exists && !opt.replace_existing) {
+        if (opt.ignore_existing) {
+            RZ_LOGI_INTR("Rename to existing path (" RZ_PathFmt " => " RZ_PathFmt ")", RZ_PathArg(old), RZ_PathArg(new));
+            return true;
+        }
+        RZ_ERROR_INTR("Failed to Rename existing path (" RZ_PathFmt " => " RZ_PathFmt "). path new already exists. try to set .replace_existing to replace the existing path",
+                      RZ_PathArg(old), RZ_PathArg(new));
+        return false;
+    }
+
+    auto old_cstr = rz__path_cstr_temp(old);
+    auto new_cstr = rz__path_cstr_temp(new);
+#if RZ_TARGET_OS_WINDOWS
+    if (MoveFileExA(old_cstr, new_cstr, (opt.replace_existing) ? MOVEFILE_REPLACE_EXISTING : 0)) rz_return_defer(true);
+    if (rz_last_os_error() == ERROR_ACCESS_DENIED) {
+        // TODO:
+        // if `MoveFileExW` fails with ERROR_ACCESS_DENIED then try to move
+        // the file while ignoring the readonly attribute.
+        // This is accomplished by calling `SetFileInformationByHandle` with `FileRenameInfoEx`.
+    }
+    RZ_OS_ERROR_INTR("Failed to rename path ('%s' => '%s')", old_cstr, new_cstr);
+    result = false;
+#else
+    if (rename(old_cstr, new_cstr) == 0) rz_return_defer(true);
+    RZ_OS_ERROR_INTR("Failed to rename path ('%s' => '%s')", old_cstr, new_cstr);
+    result = false;
+#endif
+defer:
+    rz_temp_rewind(m);
+    return result;
 }
 
 RZ_DEF bool rz_fs_read(const RZ_Path path, RZ_BytesArray *bytes) {
@@ -1067,7 +1340,9 @@ RZ_DEF RZ_PathModifiedStatus rz_fs_is_modified(const RZ_Path input, const RZ_Pat
 }
 
 RZ_DEF RZ_Fd rz_fd_open_opt(const RZ_Path path, RZ_FdOpenOpt o) {
-    const char *path_cstr = rz__path_cstr_internal(path);
+    RZ_Fd       result    = RZ_INVALID_FD;
+    auto        m         = rz_temp_snapshot();
+    const char *path_cstr = rz__path_cstr_temp(path);
 #if RZ_TARGET_OS_WINDOWS
     /// FIXME: the windows implementation is suck and i think is wrong. fix later.
     DWORD desiredAccess       = 0;
@@ -1107,32 +1382,25 @@ RZ_DEF RZ_Fd rz_fd_open_opt(const RZ_Path path, RZ_FdOpenOpt o) {
     saAttr.bInheritHandle       = TRUE;
     saAttr.lpSecurityDescriptor = NULL;
 
-    HANDLE handle               = CreateFileA(path_cstr, desiredAccess, shareMode, &saAttr, creationDisposition, flagsAndAttributes, NULL);
-    if (handle == INVALID_HANDLE_VALUE) {
+    result                      = CreateFileA(path_cstr, desiredAccess, shareMode, &saAttr, creationDisposition, flagsAndAttributes, NULL);
+    if (result == INVALID_HANDLE_VALUE) {
         // map Win32 error to your rz error handling if desired
-        return RZ_INVALID_FD;
+        rz_return_defer(RZ_INVALID_FD);
     }
-
     // If opened with append semantics, move pointer to end.
     if (o.append) {
-        SetFilePointer(handle, 0, NULL, FILE_END);
+        SetFilePointer(result, 0, NULL, FILE_END);
     }
-
-    return (RZ_Fd)handle;
-
-#else // unix
-
-    RZ_Fd  fd   = RZ_INVALID_FD;
-    rz_int flag = 0;
-
+#else
     // set read or write or read and write
+    rz_int flag = 0;
     if ((o.read == true) && (o.write == true)) rz_bit_set(flag, O_RDWR);
     else {
         if (o.read) rz_bit_set(flag, O_RDONLY);
         if (o.write) rz_bit_set(flag, O_WRONLY);
     }
 
-    // if .append or .truncate auto add write
+    // if .append or .truncate auto add write.
     if (o.append == true) rz_bit_set_all(flag, O_APPEND, O_WRONLY);
     if (o.truncate == true) rz_bit_set_all(flag, O_TRUNC, O_WRONLY);
 
@@ -1141,7 +1409,7 @@ RZ_DEF RZ_Fd rz_fd_open_opt(const RZ_Path path, RZ_FdOpenOpt o) {
         if ((o.write == false) || (o.append == false)) {
             errno = EINVAL; // invalid argument
             RZ_OS_ERROR_INTR("Failed to open file opening file (path: '" RZ_SVFmt "'). .create set without .write or .append", RZ_SVArg(path));
-            return RZ_INVALID_FD;
+            rz_return_defer(RZ_INVALID_FD);
         }
         if (o.perm == 0) o.perm = RZ_DEFAULT_OPEN_CREATION_PERMISION;
 
@@ -1150,22 +1418,24 @@ RZ_DEF RZ_Fd rz_fd_open_opt(const RZ_Path path, RZ_FdOpenOpt o) {
             if (rz_fs_exists(path)) {
                 errno = EEXIST;    // file already exists
                 RZ_OS_ERROR_INTR("Failed to open file (path: " RZ_SVFmt ") with options .create_new file.", RZ_SVArg(path));
-                return RZ_INVALID_FD;
+                rz_return_defer(RZ_INVALID_FD);
             }
             rz_bit_clear(flag, O_TRUNC); // clear the truncate bit
         }
-        fd = open(path_cstr, flag, (mode_t)o.perm);
+        result = open(path_cstr, flag, (mode_t)o.perm);
     } else {
         // if .create_new  or .create not set. open without perm
-        fd = open(path_cstr, flag);
+        result = open(path_cstr, flag);
     }
 
-    if (fd < 0) {
+    if (result < 0) {
         RZ_OS_ERROR_INTR("opening file: '" RZ_SVFmt "'.create set without .write or .append", RZ_SVArg(path));
-        return RZ_INVALID_FD;
+        result = RZ_INVALID_FD;
     }
-    return fd;
 #endif
+defer:
+    rz_temp_rewind(m);
+    return result;
 }
 
 RZ_DEF bool rz_fd_close(RZ_Fd fd) {
@@ -1353,27 +1623,27 @@ struct RZ_FsDir {
 };
 
 RZ_DEF RZ_FsDir *rz_dir_open(const RZ_Path path, RZ_Allocator a) {
-    RZ_FsDir *res = rz_calloc(a, res, 1);
+    bool      result = true;
+    RZ_FsDir *res    = rz_calloc(a, res, 1);
     RZ_ASSERT_ALLOCATOR_PTR(res);
     res->path_len = path.len;
     res->entrybuf = rz_pathbuf_from_path_alloc(path, a);
+    auto m        = rz_temp_snapshot();
 #if RZ_TARGET_OS_WINDOWS
-    char *cstr       = rz_snprintf(rz__path_cstr_buf, RZ__PATH_CSTR_BUF_LEN, RZ_SVFmt "\\*", RZ_SVArg(path));
+    char *cstr       = rz_tsprintf(RZ_SVFmt "\\*", RZ_SVArg(path));
     res->win32_hFind = FindFirstFileA(cstr, &res->win32_data);
-
-    if (res->win32_hFind == INVALID_HANDLE_VALUE) {
-        RZ_OS_ERROR_INTR("Failed to open directory '" RZ_SVFmt "'", RZ_SVArg(path));
-        rz_free(a, res, 1);
-        return NULL;
-    }
+    if (res->win32_hFind == INVALID_HANDLE_VALUE) rz_return_defer(false);
 #else
-    res->posix_dir = opendir(rz__path_cstr_internal(path));
-    if (res->posix_dir == NULL) {
+    res->posix_dir = opendir(rz__path_cstr_temp(path));
+    if (res->posix_dir == NULL) rz_return_defer(false);
+#endif
+defer:
+    if (!result) {
         RZ_OS_ERROR_INTR("Failed to open directory '" RZ_SVFmt "'", RZ_SVArg(path));
         rz_free(a, res, 1);
-        return NULL;
+        res = NULL;
     }
-#endif
+    rz_temp_rewind(m);
     return res;
 }
 

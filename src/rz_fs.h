@@ -22,6 +22,27 @@ typedef int RZ_Fd;
 #    define RZ_PATH_WINDOWS_SEP '\\'
 #    define RZ_PATH_UNIX_SEP    '/'
 
+#    if RZ_TARGET_FAMILY_UNIX && !RZ_TARGET_COMPILER_WASI
+#        ifndef RZ_DEFAULT_OPEN_CREATION_PERMISION
+#            // RZ_DEFAULT_OPEN_CREATION_PERMISION: 0644
+#            define RZ_DEFAULT_OPEN_CREATION_PERMISION (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
+#        endif
+#        ifndef RZ_DEFAULT_DIRECTORY_CREATION_PERMISION
+#            // RZ_DEFAULT_DIRECTORY_CREATION_PERMISION : 0755
+#            define RZ_DEFAULT_DIRECTORY_CREATION_PERMISION (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+#        endif
+#    else
+#        ifndef RZ_DEFAULT_OPEN_CREATION_PERMISION
+#            define RZ_DEFAULT_OPEN_CREATION_PERMISION 0
+#        endif
+#        ifndef RZ_DEFAULT_DIRECTORY_CREATION_PERMISION
+#            define RZ_DEFAULT_DIRECTORY_CREATION_PERMISION 0
+#        endif
+#    endif
+
+#    define RZ_PathFmt     "'%.*s'"
+#    define RZ_PathArg(sv) ((int)(sv).len), (sv).data
+
 typedef RZ_Str     RZ_PathBuf;
 typedef RZ_StrView RZ_Path;
 
@@ -104,12 +125,13 @@ enum
 #    define rz_filetype_is_hidden(filetype)  rz_bit(filetype, RZ_PATH_FILE_TYPE_HIDDEN)
 
 typedef struct {
-    RZ_PathFileType type;
-    rz_u64          size;
-
     RZ_SystemTime modified;
     RZ_SystemTime accessed;
     RZ_SystemTime created;
+
+    rz_u64          size;
+    rz_u32          perm;
+    RZ_PathFileType type;
 } RZ_PathMetadata;
 
 RZ_DEC bool rz_path_metadata(const RZ_Path path, RZ_PathMetadata *metadata);
@@ -205,7 +227,8 @@ RZ_DEC bool rz_fs_copy_opt(const RZ_Path src_path, const RZ_Path dst_path, RZ_Fs
 typedef struct {
     bool skip_exists;
     // Recursively create a directory and all of its parent components if they are missing.
-    bool all;
+    bool   all;
+    rz_u32 perm;
 } RZ_FsCreateDirOpt;
 RZ_DEC bool rz_fs_create_dir_opt(const RZ_Path dir_path, RZ_FsCreateDirOpt opt);
 #    define rz_fs_create_dir(dir_path, ...) rz_fs_create_dir_opt(dir_path, (RZ_FsCreateDirOpt){__VA_ARGS__});
@@ -216,6 +239,7 @@ typedef struct {
     bool ignore_access_denied;
 
     // remove file or directory into the trash (recycle bin).
+    // TODO: implement
     bool remove_to_trash;
     // Recursively remove if path is directory and all of its parent components.
     bool all;
@@ -225,13 +249,13 @@ RZ_DEC bool rz_fs_remove_opt(const RZ_Path path, RZ_FsRemoveOpt opt);
 #    define rz_fs_remove(path, ...) rz_fs_remove_opt(path, (RZ_FsRemoveOpt){__VA_ARGS__})
 
 typedef struct {
+    bool replace_existing;
     bool ignore_existing;
-    bool ignore_access_denied;
 } RZ_FsRenameOpt;
-RZ_DEC bool rz_fs_rename_opt(const RZ_Path before_path, const RZ_Path after_path, RZ_FsRenameOpt opt);
-#    define rz_fs_rename(before_path, after_path, ...) rz_fs_rename_opt(before_path, after_path, ((RZ_FsRenameOpt){__VA_ARGS__}))
-#    define rz_fs_move_opt                             rz_fs_rename_opt
-#    define rz_fs_move                                 rz_fs_rename
+RZ_DEC bool rz_fs_rename_opt(const RZ_Path old, const RZ_Path new, RZ_FsRenameOpt opt);
+#    define rz_fs_rename(old, new, ...) rz_fs_rename_opt(old, new, ((RZ_FsRenameOpt){__VA_ARGS__}))
+#    define rz_fs_move_opt              rz_fs_rename_opt
+#    define rz_fs_move                  rz_fs_rename
 
 RZ_DEC bool rz_fs_read(const RZ_Path path, RZ_BytesArray *bytes);
 RZ_DEC bool rz_fs_read_to_string(const RZ_Path path, RZ_Str *string);
@@ -246,10 +270,6 @@ typedef enum : rz_i8
     RZ_PATH_MODIF_CHANGED,
 } RZ_PathModifiedStatus;
 RZ_DEC RZ_PathModifiedStatus rz_fs_is_modified(const RZ_Path input, const RZ_Path output);
-
-#    ifndef RZ_DEFAULT_OPEN_CREATION_PERMISION
-#        define RZ_DEFAULT_OPEN_CREATION_PERMISION (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) // 0644
-#    endif
 
 typedef struct {
     // Sets the option for read access.
@@ -267,12 +287,10 @@ typedef struct {
     // if set and .write or .append is not set. rz_fd_open_opt will failed
     bool create_new;
 
-#    if RZ_TARGET_FAMILY_UNIX
     // [for unix only]
     // default to 0644 `RZ_DEFAULT_OPEN_CREATION_PERMISION`
     // [user: read & write] [group: read] [other: read]
-    mode_t perm;
-#    endif
+    rz_u32 perm;
 } RZ_FdOpenOpt;
 
 RZ_DEC RZ_Fd rz_fd_open_opt(const RZ_Path path, RZ_FdOpenOpt opt);
