@@ -105,9 +105,11 @@ RZ_DEC void         rz_arena_trim(RZ_ArenaAllocator *a);
 #        define RZ_TEMP_ALLOCATOR_CAPACITY (8u * 1024u * 1024u)
 #    endif
 
-RZ_DEC RZ_Allocator rz_temp_allocator(void);
-RZ_DEC RZ_ArenaMark rz_temp_snapshot(void);
-RZ_DEC void         rz_temp_rewind(RZ_ArenaMark m);
+// this is not thread safe.
+// because the allocated pointer is located in. static memory (bss).
+RZ_DEC RZ_Allocator              rz_temp_allocator(void);
+RZ_ALWAYS_INLINE RZ_DEC rz_usize rz_temp_snapshot(void);
+RZ_ALWAYS_INLINE RZ_DEC void     rz_temp_rewind(rz_usize m);
 
 #    define rz_tmemdup(data, size)   rz_memdup(rz_temp_allocator(), data, size)
 #    define rz_tstrdup(cstr)         rz_strdup(rz_temp_allocator(), cstr)

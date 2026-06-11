@@ -273,12 +273,16 @@
 #
 #        include <dirent.h>
 #        include <fcntl.h>
+#        include <malloc.h>
 #        include <pwd.h>
 #        include <sys/stat.h>
 #        include <sys/types.h>
 #        include <sys/wait.h>
 #    endif
-#    if defined(RZ_OS_FREEBSD)
+#    if RZ_TARGET_OS_LINUX
+#        include <sys/sendfile.h>
+#    endif
+#    if RZ_TARGET_OS_FREEBSD
 #        include <sys/sysctl.h>
 #    endif
 
@@ -329,6 +333,17 @@
 #        define RZ_NOINLINE RZ_ATTR((noinline))
 #    else
 #        define RZ_NOINLINE
+#    endif
+#    if RZ_TARGET_COMPILER_MSVC
+#        define RZ_ALWAYS_INLINE __forceinline
+#    elif RZ_TARGET_COMPILER_CLANG
+#        define RZ_ALWAYS_INLINE [[clang::always_inline]]
+#    elif RZ_TARGET_COMPILER_GCC
+#        define RZ_ALWAYS_INLINE RZ_ATTR((always_inline))
+#    elif RZ_HAS_ATTR(always_inline)
+#        define RZ_ALWAYS_INLINE RZ_ATTR((always_inline))
+#    else
+#        define RZ_ALWAYS_INLINE inline
 #    endif
 #    if RZ_TARGET_COMPILER_MSVC
 #        define RZ_PRINTF_FMT(FMT) _Printf_format_string_ FMT
@@ -437,7 +452,6 @@
 #    define RZ_STATIC_ASSERT                       static_assert
 #    define RZ_STATIC_ASSERT_TYPE_COMPATIBLE(A, B) RZ_STATIC_ASSERT(RZ_TYPES_COMPATIBLE(A, B), "typeof (" RZ_STRINGIFY(A) ") and (" RZ_STRINGIFY(B) ") is not compatible")
 #    define RZ_ASSERT(EXPR, ...)                   ((void)((!!(EXPR)) || (RZ_PANIC("'" #EXPR "' - " __VA_ARGS__), 0)))
-#    define RZ_ASSERT_MSG(C, MSG)                  RZ_ASSERT((C), (MSG))
 #    define RZ_ASSERT_NOT_NULL(PTR)                RZ_ASSERT((PTR) != NULL && "Ptr should not be NULL")
 #    define RZ_ASSERT_ALLOCATOR_PTR(PTR)           RZ_ASSERT((PTR) != NULL && "Allocator Return NULL. Memory Full?")
 #    if RZ_DEBUG
@@ -445,7 +459,6 @@
 #    else
 #        define RZ_DBG_ASSERT(...)
 #    endif // if RZ_DEBUG
-#    define RZ_DBG_ASSERT_MSG(EXPR, MSG)     RZ_ASSERT(EXPR, "DEBUG ASSERTION: " MSG)
 #    define RZ_DBG_ASSERT_NOT_NULL(PTR)      RZ_ASSERT((PTR) != NULL && "Ptr should not be NULL")
 #    define RZ_DBG_ASSERT_ALLOCATOR_PTR(PTR) RZ_ASSERT((PTR) != NULL && "Allocator Return NULL. Memory Full?")
 

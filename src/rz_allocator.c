@@ -163,10 +163,6 @@ RZ_DEF rz_usize rz_mem_page_size(void) {
     return ((RZ_PAGE_SIZE_MIN == RZ_PAGE_SIZE_MAX) ? RZ_PAGE_SIZE_MIN : rz__query_page_size());
 }
 
-#endif // RZ_ALLOC_IMPL
-
-#ifdef RZ_ALLOC_STD_IMPL
-
 // return opaque pointer allocated, or NULL if error.
 static void *rz__astd_alloc(void *a, rz_usize len);
 static void *rz__astd_remap(void *a, void *mem, rz_usize mem_len, rz_usize new_len);
@@ -234,13 +230,6 @@ void rz__astd_dealloc(void *a, void *mem, rz_usize mem_len) {
     RZ_FREE(mem);
 }
 
-#endif /* ifdef RZ_ALLOC_STD_IMPL */
-
-#ifdef RZ_ALLOC_PAGE_IMPL
-
-#endif /* ifdef RZ_ALLOC_PAGE_IMPL */
-
-#ifdef RZ_ALLOC_ARENA_IMPL
 struct RZ_ArenaAllocatorRegion {
     RZ_ArenaAllocatorRegion *next;
     rz_usize                 count;
@@ -311,7 +300,7 @@ void *rz__arena_remap(void *opaque, void *mem, rz_usize mem_len, rz_usize new_le
 
     void *newptr = rz__arena_alloc(a, new_len);
     if (newptr == NULL) return NULL;
-    rz_memcpy(newptr, mem, mem_len);
+    memcpy(newptr, mem, mem_len);
     return newptr;
 }
 
@@ -378,22 +367,43 @@ void rz_arena_trim(RZ_ArenaAllocator *a) {
     }
     a->end->next = NULL;
 }
-#endif /* ifdef RZ_ALLOC_ARENA_IMPL */
 
-#ifdef RZ_ALLOC_TEMP_IMPL
-static RZ_ArenaAllocator rz__temp_arena_allocator_arena = {0};
+typedef struct {
+    rz_usize len;
+    rz_u8   *data; // rz_u8[RZ_TEMP_ALLOCATOR_CAPACITY]
+} RZ__TempAllocator;
 
-RZ_DEF RZ_Allocator rz_temp_allocator(void) {
-    if (!rz_is_allocator(rz__temp_arena_allocator_arena.child_allocator)) rz__temp_arena_allocator_arena.child_allocator = rz_std_allocator();
-    return rz_arena_allocator(&rz__temp_arena_allocator_arena);
+static void *rz__temp_allocator_alloc(void *a, rz_usize len) {
+    RZ__TempAllocator *ta = a;
+    RZ_ASSERT((ta->len + len) < RZ_TEMP_ALLOCATOR_CAPACITY, "Temp allocator is not enough. resize / redefined RZ_TEMP_ALLOCATOR_CAPACITY with bigger capacity");
+    return ta->data + ta->len;
 }
-RZ_DEF RZ_ArenaMark rz_temp_snapshot(void) {
-    return rz_arena_snapshot(&rz__temp_arena_allocator_arena);
+static void *rz__temp_allocator_remap(void *a, void *mem, rz_usize mem_len, rz_usize new_len) {
+    void *new_ptr = rz__temp_allocator_alloc(a, new_len);
+    memmove(new_ptr, mem, mem_len);
+    return new_ptr;
 }
-RZ_DEF void rz_temp_rewind(RZ_ArenaMark m) {
-    rz_arena_rewind(&rz__temp_arena_allocator_arena, m);
+static void rz__temp_allocator_dealloc(void *a, void *mem, rz_usize mem_len) {
+    RZ_UNUSED_ALL(a, mem, mem_len);
 }
-#endif
+
+static rz_u8             rz__temp_allocator_buffer[RZ_TEMP_ALLOCATOR_CAPACITY] = {0};
+static RZ__TempAllocator rz__temp_allocator_instance                           = {0};
+RZ_DEF RZ_Allocator      rz_temp_allocator(void) {
+    static const RZ_AllocatorVTable vtable = {
+        .alloc   = rz__temp_allocator_alloc,
+        .remap   = rz__temp_allocator_remap,
+        .dealloc = rz__temp_allocator_dealloc,
+    };
+    if (rz__temp_allocator_instance.data == NULL) rz__temp_allocator_instance.data = rz__temp_allocator_buffer;
+    return (RZ_Allocator){.ptr = &rz__temp_allocator_instance, .vtable = &vtable};
+}
+RZ_DEF rz_usize rz_temp_snapshot(void) {
+    return rz__temp_allocator_instance.len;
+}
+RZ_DEF void rz_temp_rewind(rz_usize m) {
+    rz__temp_allocator_instance.len = m;
+}
 
 RZ_DEF bool rz_memequal(const void *lhs, rz_usize lhs_size, const void *rhs, rz_usize rhs_size) {
     return (lhs_size == rhs_size) && (memcmp(lhs, rhs, lhs_size) == 0);
@@ -405,3 +415,4 @@ RZ_DEF bool rz_memswap(void *lhs, void *rhs, rz_usize n) {
     for (; n; n--, l++, r++) RZ_SWAP(*l, *r);
     return true;
 }
+#endif // RZ_ALLOC_IMPL
